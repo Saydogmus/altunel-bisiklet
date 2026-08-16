@@ -1,12 +1,43 @@
-import type { Metadata } from 'next'
-import Link from 'next/link'
+'use client'
 
-export const metadata: Metadata = {
-  title: 'Giriş Yap',
-  description: 'Altunel Bisiklet hesabınıza giriş yapın.',
-}
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
+import { Loader2, Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [showPw, setShowPw] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    const form = e.currentTarget
+    const email = (form.elements.namedItem('email') as HTMLInputElement).value
+    const password = (form.elements.namedItem('password') as HTMLInputElement).value
+
+    const supabase = createClient()
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+
+    if (signInError) {
+      if (signInError.message.toLowerCase().includes('invalid')) {
+        setError('E-posta veya şifre hatalı. Lütfen tekrar deneyin.')
+      } else {
+        setError(signInError.message)
+      }
+      setLoading(false)
+      return
+    }
+
+    router.push('/')
+    router.refresh()
+  }
+
   return (
     <div className="page-container py-16 flex justify-center">
       <div className="w-full max-w-md">
@@ -26,8 +57,15 @@ export default function LoginPage() {
           </p>
         </div>
 
+        {/* Hata */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
+            {error}
+          </div>
+        )}
+
         {/* Form */}
-        <form className="space-y-4" action="#" method="POST">
+        <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
             <label htmlFor="email" className="block text-label-md text-on-surface mb-1.5">
               E-posta Adresi
@@ -47,20 +85,33 @@ export default function LoginPage() {
             <label htmlFor="password" className="block text-label-md text-on-surface mb-1.5">
               Şifre
             </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              placeholder="••••••••"
-              className="input-field"
-            />
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                type={showPw ? 'text' : 'password'}
+                autoComplete="current-password"
+                required
+                placeholder="••••••••"
+                className="input-field pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary hover:text-on-surface"
+                tabIndex={-1}
+              >
+                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 text-sm text-secondary cursor-pointer">
-              <input type="checkbox" className="w-4 h-4 border-surface-container text-primary focus:ring-primary" />
+              <input
+                type="checkbox"
+                className="w-4 h-4 border-surface-container text-primary focus:ring-primary"
+              />
               Beni hatırla
             </label>
             <Link href="#" className="text-sm text-primary hover:underline">
@@ -70,10 +121,15 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="btn-primary w-full justify-center mt-2"
+            disabled={loading}
+            className="btn-primary w-full justify-center mt-2 disabled:opacity-60"
             id="login-submit-btn"
           >
-            Giriş Yap
+            {loading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" />Giriş Yapılıyor...</>
+            ) : (
+              'Giriş Yap'
+            )}
           </button>
         </form>
 
@@ -84,7 +140,7 @@ export default function LoginPage() {
           <div className="flex-1 h-px bg-surface-container" />
         </div>
 
-        {/* Guest checkout note */}
+        {/* Misafir */}
         <div className="bg-surface-container-low border border-surface-container p-4 mb-6">
           <p className="text-sm text-secondary leading-relaxed">
             💡 <strong className="text-on-surface">Üye olmadan devam etmek</strong> ister misiniz?
