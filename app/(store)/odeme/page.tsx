@@ -1,14 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import {
   ArrowRight, Lock, User, UserX, CheckCircle,
   Loader2, ShoppingCart, Bike, MapPin, Phone, Mail,
 } from 'lucide-react'
 import { useCartStore } from '@/store/cartStore'
 import { formatPrice } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 
 const SHIPPING_THRESHOLD = 2000
 const SHIPPING_FEE = 99.90
@@ -32,6 +34,8 @@ export default function CheckoutPage() {
   const [guestEmail, setGuestEmail] = useState('')
   const [placing, setPlacing] = useState(false)
   const [orderError, setOrderError] = useState<string | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const router = useRouter()
 
   const [address, setAddress] = useState<AddressForm>({
     full_name: '',
@@ -105,6 +109,42 @@ export default function CheckoutPage() {
     } finally {
       setPlacing(false)
     }
+  }
+
+  // Hydration sorunu için mounted state'i
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+    
+    // Auth init ve pre-fill
+    const initAuth = async () => {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (session?.user) {
+        setMode('member')
+        setStep('address') // Auto skip step 1
+        const meta = session.user.user_metadata
+        setAddress(prev => ({
+          ...prev,
+          full_name: meta?.full_name || '',
+          phone: meta?.phone || '',
+          email: session.user.email || '',
+          address: meta?.address || '',
+        }))
+      }
+      setAuthLoading(false)
+    }
+
+    initAuth()
+  }, [])
+
+  if (!mounted || authLoading) {
+    return (
+      <div className="page-container py-16 flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      </div>
+    )
   }
 
   if (items.length === 0) {
