@@ -16,12 +16,17 @@ export default function SiparislerPage() {
   useEffect(() => {
     const fetchOrders = async () => {
       const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
       
-      if (!session) {
+      // getSession yerine daha güvenilir olan getUser() kullanıyoruz
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      
+      if (userError || !user) {
+        console.log("Supabase Auth Hatası: ", userError)
         router.push('/hesap/giris')
         return
       }
+
+      console.log("Aktif Kullanıcı ID: ", user.id)
 
       const { data, error } = await supabase
         .from('orders')
@@ -38,8 +43,13 @@ export default function SiparislerPage() {
             )
           )
         `)
-        .eq('user_id', session.user.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
+
+      console.log("Çekilen Siparişler: ", data)
+      if (error) {
+        console.error("Supabase Hatası: ", error)
+      }
 
       if (data) setOrders(data)
       setLoading(false)
@@ -75,8 +85,9 @@ export default function SiparislerPage() {
 
   if (loading) {
     return (
-      <div className="page-container py-16 flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="page-container py-16 flex flex-col items-center justify-center min-h-[50vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+        <p className="text-secondary font-medium animate-pulse">Siparişleriniz yükleniyor...</p>
       </div>
     )
   }
