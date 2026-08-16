@@ -2,8 +2,11 @@
 
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
-import { ShoppingCart, Menu, X, ChevronDown, User } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ShoppingCart, Menu, X, ChevronDown, User, LogOut } from 'lucide-react'
 import { useCartStore } from '@/store/cartStore'
+import { createClient } from '@/lib/supabase/client'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 import CartDrawer from './CartDrawer'
 
 // ── Mega Menü Yapısı ─────────────────────────────────────────────────────────
@@ -74,8 +77,12 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [openMobileMenu, setOpenMobileMenu] = useState<string | null>(null)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [user, setUser] = useState<SupabaseUser | null>(null)
+  
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const router = useRouter()
   const { getTotalItems, toggleCart } = useCartStore()
   const totalItems = getTotalItems()
 
@@ -83,8 +90,33 @@ export default function Navbar() {
     setMounted(true)
     const handleScroll = () => setIsScrolled(window.scrollY > 10)
     window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
+
+    const supabase = createClient()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      subscription.unsubscribe()
+    }
   }, [])
+
+  const handleLogout = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    setAccountMenuOpen(false)
+    setMobileOpen(false)
+    router.push('/')
+  }
+
+  const userDisplayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Kullanıcı'
 
   const handleMouseEnter = (id: string) => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
@@ -196,14 +228,57 @@ export default function Navbar() {
 
             {/* Right Actions */}
             <div className="flex items-center gap-1">
-              <Link
-                href="/hesap/giris"
-                className="hidden md:flex items-center gap-1.5 px-4 py-2 text-label-md text-secondary hover:text-primary transition-colors"
-                id="nav-login-link"
-              >
-                <User className="w-4 h-4" />
-                Giriş/Üye Ol
-              </Link>
+              {user ? (
+                <div 
+                  className="relative hidden md:block"
+                  onMouseEnter={() => {
+                    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+                    setAccountMenuOpen(true)
+                  }}
+                  onMouseLeave={() => {
+                    timeoutRef.current = setTimeout(() => setAccountMenuOpen(false), 120)
+                  }}
+                >
+                  <button className="flex items-center gap-1.5 px-4 py-2 text-label-md text-secondary hover:text-primary transition-colors">
+                    <User className="w-4 h-4" />
+                    Hesabım
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${accountMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {accountMenuOpen && (
+                    <div className="absolute top-full right-0 mt-1 w-56 bg-white border border-surface-container shadow-medium animate-fade-in z-50 py-2">
+                      <div className="px-4 py-2 border-b border-surface-container mb-1">
+                        <p className="text-sm font-semibold text-on-surface truncate">{userDisplayName}</p>
+                        <p className="text-xs text-secondary truncate">{user.email}</p>
+                      </div>
+                      <Link href="/hesabim/siparisler" className="block px-4 py-2 text-sm text-secondary hover:text-primary hover:bg-surface-container-low transition-colors" onClick={() => setAccountMenuOpen(false)}>
+                        Siparişlerim
+                      </Link>
+                      <Link href="/hesabim" className="block px-4 py-2 text-sm text-secondary hover:text-primary hover:bg-surface-container-low transition-colors" onClick={() => setAccountMenuOpen(false)}>
+                        Hesap Bilgileri / Adres
+                      </Link>
+                      <div className="border-t border-surface-container mt-1 pt-1">
+                        <button 
+                          onClick={handleLogout}
+                          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Çıkış Yap
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Link
+                  href="/hesap/giris"
+                  className="hidden md:flex items-center gap-1.5 px-4 py-2 text-label-md text-secondary hover:text-primary transition-colors"
+                  id="nav-login-link"
+                >
+                  <User className="w-4 h-4" />
+                  Giriş Yap
+                </Link>
+              )}
 
               <button
                 onClick={toggleCart}
@@ -290,16 +365,46 @@ export default function Navbar() {
                 </div>
               ))}
 
-              <div className="pt-4 border-t border-surface-container">
-                <Link
-                  href="/hesap/giris"
-                  className="flex items-center gap-2 py-3 text-label-md text-secondary hover:text-primary"
-                  onClick={() => setMobileOpen(false)}
-                >
-                  <User className="w-4 h-4" />
-                  Giriş Yap / Kayıt Ol
-                </Link>
-              </div>
+              {user ? (
+                <div className="pt-4 border-t border-surface-container">
+                  <div className="px-4 py-2 mb-2 bg-surface-container-low">
+                    <p className="text-sm font-semibold text-on-surface truncate">{userDisplayName}</p>
+                    <p className="text-xs text-secondary truncate">{user.email}</p>
+                  </div>
+                  <Link
+                    href="/hesabim/siparisler"
+                    className="block py-2.5 px-4 text-sm text-secondary hover:text-primary"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Siparişlerim
+                  </Link>
+                  <Link
+                    href="/hesabim"
+                    className="block py-2.5 px-4 text-sm text-secondary hover:text-primary"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Hesap Bilgileri / Adres
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left py-2.5 px-4 text-sm text-red-600 hover:bg-red-50 mt-2 border-t border-surface-container flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Çıkış Yap
+                  </button>
+                </div>
+              ) : (
+                <div className="pt-4 border-t border-surface-container">
+                  <Link
+                    href="/hesap/giris"
+                    className="flex items-center gap-2 py-3 px-4 text-label-md text-secondary hover:text-primary"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <User className="w-4 h-4" />
+                    Giriş Yap / Kayıt Ol
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         )}
