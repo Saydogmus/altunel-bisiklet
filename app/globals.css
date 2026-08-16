@@ -1,0 +1,150 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: #f9f9f9;
+    color: #1a1c1c;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  /* Buttons */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-8 py-4 font-semibold transition-all duration-200 active:scale-95;
+    background-color: #b70100;
+    color: #ffffff;
+    letter-spacing: 0.05em;
+    font-size: 14px;
+  }
+
+  .btn-primary:hover {
+    background-color: #930100;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 px-8 py-4 font-semibold transition-all duration-200 active:scale-95;
+    border: 1px solid #eeeeee;
+    color: #5f5e5e;
+    font-size: 14px;
+    letter-spacing: 0.05em;
+  }
+
+  .btn-outline:hover {
+    border-color: #1a1c1c;
+    color: #1a1c1c;
+  }
+
+  /* Inputs */
+  .input-field {
+    @apply w-full px-4 py-3 border bg-white text-sm transition-all duration-200;
+    border-color: #eeeeee;
+    color: #1a1c1c;
+    font-size: 16px;
+    outline: none;
+  }
+
+  .input-field::placeholder {
+    color: #5f5e5e;
+  }
+
+  .input-field:focus {
+    border-color: #b70100;
+  }
+
+  /* Admin items */
+  .admin-nav-item {
+    @apply flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all duration-200;
+    color: #5f5e5e;
+  }
+
+  .admin-nav-item:hover {
+    background-color: #f3f3f3;
+    color: #1a1c1c;
+  }
+
+  .admin-nav-item.active {
+    background-color: #fff1f1;
+    color: #b70100;
+    border-left: 2px solid #b70100;
+  }
+
+  /* Container */
+  .page-container {
+    @apply max-w-screen-xl mx-auto px-4 md:px-10;
+  }
+
+  /* Skeleton */
+  .skeleton {
+    @apply animate-pulse;
+    background-color: #eeeeee;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 text-xs font-semibold;
+  }
+
+  .badge-red {
+    @apply badge;
+    background-color: #fff1f1;
+    color: #b70100;
+  }
+
+  .badge-green {
+    @apply badge bg-green-100 text-green-700;
+  }
+
+  .badge-yellow {
+    @apply badge bg-yellow-100 text-yellow-700;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f3f3f3;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #eeeeee;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #c0c0c0;
+}
