@@ -1,12 +1,69 @@
-import type { Metadata } from 'next'
-import Link from 'next/link'
+'use client'
 
-export const metadata: Metadata = {
-  title: 'Kayıt Ol',
-  description: 'Altunel Bisiklet\'e üye olun.',
-}
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
+import { Loader2 } from 'lucide-react'
 
 export default function RegisterPage() {
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    const form = e.currentTarget
+    const email = (form.elements.namedItem('email') as HTMLInputElement).value
+    const password = (form.elements.namedItem('password') as HTMLInputElement).value
+    const confirm = (form.elements.namedItem('password_confirm') as HTMLInputElement).value
+
+    if (password !== confirm) {
+      setError('Şifreler eşleşmiyor.')
+      setLoading(false)
+      return
+    }
+
+    const supabase = createClient()
+
+    // emailRedirectTo ve options.emailConfirm kapatılarak direkt kayıt
+    const { error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        // E-posta doğrulamasını atla — otomatik giriş
+        emailRedirectTo: undefined,
+        data: {
+          full_name: (form.elements.namedItem('full_name') as HTMLInputElement).value,
+          phone: (form.elements.namedItem('phone') as HTMLInputElement).value,
+        },
+      },
+    })
+
+    if (signUpError) {
+      setError(signUpError.message === 'User already registered'
+        ? 'Bu e-posta adresi zaten kayıtlı.'
+        : signUpError.message)
+      setLoading(false)
+      return
+    }
+
+    // Kayıt sonrası direkt giriş yap
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+
+    if (signInError) {
+      // Giriş yapılamazsa yine de ana sayfaya yönlendir
+      router.push('/')
+      return
+    }
+
+    router.push('/')
+    router.refresh()
+  }
+
   return (
     <div className="page-container py-16 flex justify-center">
       <div className="w-full max-w-md">
@@ -23,8 +80,15 @@ export default function RegisterPage() {
           </p>
         </div>
 
+        {/* Hata */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
+            {error}
+          </div>
+        )}
+
         {/* Form */}
-        <form className="space-y-4" action="#" method="POST">
+        <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
             <label htmlFor="full_name" className="block text-label-md text-on-surface mb-1.5">
               Ad Soyad
@@ -101,21 +165,34 @@ export default function RegisterPage() {
           </div>
 
           <label className="flex items-start gap-2 text-sm text-secondary cursor-pointer">
-            <input type="checkbox" required className="w-4 h-4 mt-0.5 border-surface-container text-primary focus:ring-primary flex-shrink-0" />
+            <input
+              type="checkbox"
+              required
+              className="w-4 h-4 mt-0.5 border-surface-container text-primary focus:ring-primary flex-shrink-0"
+            />
             <span>
-              <Link href="#" className="text-primary hover:underline">Kullanım Koşulları</Link>
+              <Link href="/mesafeli-satis-sozlesmesi" className="text-primary hover:underline" target="_blank">
+                Kullanım Koşulları
+              </Link>
               {' '}ve{' '}
-              <Link href="#" className="text-primary hover:underline">KVKK</Link>
+              <Link href="/gizlilik-politikasi" className="text-primary hover:underline" target="_blank">
+                KVKK
+              </Link>
               {' '}metnini okudum ve kabul ediyorum.
             </span>
           </label>
 
           <button
             type="submit"
-            className="btn-primary w-full justify-center mt-2"
+            disabled={loading}
+            className="btn-primary w-full justify-center mt-2 disabled:opacity-60"
             id="register-submit-btn"
           >
-            Hesap Oluştur
+            {loading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" />Hesap Oluşturuluyor...</>
+            ) : (
+              'Hesap Oluştur'
+            )}
           </button>
         </form>
 
