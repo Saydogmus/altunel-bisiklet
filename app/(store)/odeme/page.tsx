@@ -35,6 +35,7 @@ export default function CheckoutPage() {
   const [placing, setPlacing] = useState(false)
   const [orderError, setOrderError] = useState<string | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
+  const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
 
   const [address, setAddress] = useState<AddressForm>({
@@ -78,6 +79,7 @@ export default function CheckoutPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          user_id: userId,
           customer_email: finalEmail,
           customer_name: address.full_name,
           customer_phone: address.phone,
@@ -123,6 +125,7 @@ export default function CheckoutPage() {
 
       if (session?.user) {
         setMode('member')
+        setUserId(session.user.id)
         setStep('address') // Auto skip step 1
         const meta = session.user.user_metadata
         setAddress(prev => ({

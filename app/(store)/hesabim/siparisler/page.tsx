@@ -24,7 +24,7 @@ export default function SiparislerPage() {
       const { data, error } = await supabase
         .from('orders')
         .select('*')
-        .eq('user_email', session.user.email)
+        .eq('user_id', session.user.id)
         .order('created_at', { ascending: false })
 
       if (data) setOrders(data)
