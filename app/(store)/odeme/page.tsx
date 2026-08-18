@@ -12,6 +12,10 @@ import { useCartStore } from '@/store/cartStore'
 import { formatPrice } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
+const TURKEY_CITIES = [
+  "Adana", "Adıyaman", "Afyonkarahisar", "Ağrı", "Amasya", "Ankara", "Antalya", "Artvin", "Aydın", "Balıkesir", "Bilecik", "Bingöl", "Bitlis", "Bolu", "Burdur", "Bursa", "Çanakkale", "Çankırı", "Çorum", "Denizli", "Diyarbakır", "Edirne", "Elazığ", "Erzincan", "Erzurum", "Eskişehir", "Gaziantep", "Giresun", "Gümüşhane", "Hakkari", "Hatay", "Isparta", "Mersin", "İstanbul", "İzmir", "Kars", "Kastamonu", "Kayseri", "Kırklareli", "Kırşehir", "Kocaeli", "Konya", "Kütahya", "Malatya", "Manisa", "Kahramanmaraş", "Mardin", "Muğla", "Muş", "Nevşehir", "Niğde", "Ordu", "Rize", "Sakarya", "Samsun", "Siirt", "Sinop", "Sivas", "Tekirdağ", "Tokat", "Trabzon", "Tunceli", "Şanlıurfa", "Uşak", "Van", "Yozgat", "Zonguldak", "Aksaray", "Bayburt", "Karaman", "Kırıkkale", "Batman", "Şırnak", "Bartın", "Ardahan", "Iğdır", "Yalova", "Karabük", "Kilis", "Osmaniye", "Düzce"
+].sort((a, b) => a.localeCompare(b, 'tr'));
+
 const SHIPPING_THRESHOLD = 2000
 const SHIPPING_FEE = 99.90
 
@@ -54,9 +58,25 @@ export default function CheckoutPage() {
   const finalEmail = guestEmail || address.email
 
   const handleAddressChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     setAddress(prev => ({ ...prev, [e.target.name]: e.target.value }))
+  }
+
+  const handleAddressSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!address.district.trim()) {
+      alert("Lütfen geçerli bir ilçe girin.")
+      return
+    }
+    
+    if (!/^\d{5}$/.test(address.postal_code)) {
+      alert("Lütfen 5 haneli geçerli bir posta kodu girin.")
+      return
+    }
+    
+    setStep('confirm')
   }
 
   // Siparişi Supabase'e kaydet → /api/orders endpoint'i
@@ -271,7 +291,7 @@ export default function CheckoutPage() {
               <h2 className="font-headline font-bold text-on-surface text-xl mb-6">Teslimat Adresi</h2>
               <form
                 className="space-y-4"
-                onSubmit={e => { e.preventDefault(); setStep('confirm') }}
+                onSubmit={handleAddressSubmit}
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -316,8 +336,19 @@ export default function CheckoutPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label htmlFor="city" className="block text-sm font-semibold text-on-surface mb-1.5">İl <span className="text-primary">*</span></label>
-                    <input id="city" name="city" type="text" required value={address.city}
-                      onChange={handleAddressChange} className="input-field" placeholder="İstanbul" />
+                    <select 
+                      id="city" 
+                      name="city" 
+                      required 
+                      value={address.city}
+                      onChange={handleAddressChange} 
+                      className="input-field appearance-none bg-white"
+                    >
+                      <option value="" disabled>İl Seçiniz</option>
+                      {TURKEY_CITIES.map(city => (
+                        <option key={city} value={city}>{city}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label htmlFor="district" className="block text-sm font-semibold text-on-surface mb-1.5">İlçe <span className="text-primary">*</span></label>
@@ -327,7 +358,7 @@ export default function CheckoutPage() {
                   <div>
                     <label htmlFor="postal_code" className="block text-sm font-semibold text-on-surface mb-1.5">Posta Kodu <span className="text-primary">*</span></label>
                     <input id="postal_code" name="postal_code" type="text" required value={address.postal_code}
-                      onChange={handleAddressChange} className="input-field" placeholder="34710" />
+                      onChange={handleAddressChange} className="input-field" placeholder="34710" maxLength={5} />
                   </div>
                 </div>
 
