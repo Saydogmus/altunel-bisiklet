@@ -1,21 +1,65 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Package, ShoppingBag, TrendingUp, AlertTriangle, Plus, Upload } from 'lucide-react'
-import { MOCK_PRODUCTS, MOCK_CATEGORIES } from '@/lib/mock-data'
+import { createServiceClient } from '@/lib/supabase/server'
 
 export const metadata: Metadata = { title: 'Admin — Dashboard' }
 
-export default function AdminDashboard() {
-  const totalProducts = MOCK_PRODUCTS.length
-  const totalRevenue = MOCK_PRODUCTS.reduce((sum, p) => sum + p.price, 0)
-  const lowStock = MOCK_PRODUCTS.filter((p) => p.stock <= 3 && p.stock > 0)
-  const outOfStock = MOCK_PRODUCTS.filter((p) => p.stock === 0)
+export default async function AdminDashboard() {
+  const supabase = createServiceClient()
+
+  // ── Gerçek verileri Supabase'den çek ──────────────────────────────────────
+
+  // 1. Toplam ürün sayısı
+  const { count: totalProducts } = await supabase
+    .from('products')
+    .select('*', { count: 'exact', head: true })
+
+  // 2. Toplam sipariş sayısı
+  const { count: totalOrders } = await supabase
+    .from('orders')
+    .select('*', { count: 'exact', head: true })
+
+  // 3. Toplam ciro (tüm siparişlerin total_amount toplamı)
+  const { data: revenueData } = await supabase
+    .from('orders')
+    .select('total_amount')
+
+  const totalRevenue = (revenueData ?? []).reduce(
+    (sum, order) => sum + (Number(order.total_amount) || 0),
+    0
+  )
+
+  // 4. Düşük stoklu ürünler (stok <= 3 ve stok > 0)
+  const { data: lowStockProducts } = await supabase
+    .from('products')
+    .select('id, name, stock')
+    .gt('stock', 0)
+    .lte('stock', 3)
+    .order('stock', { ascending: true })
+    .limit(10)
+
+  // 5. Stok tükenmiş ürünler
+  const { count: outOfStockCount } = await supabase
+    .from('products')
+    .select('*', { count: 'exact', head: true })
+    .eq('stock', 0)
+
+  // 6. Son eklenen 10 ürün
+  const { data: recentProducts } = await supabase
+    .from('products')
+    .select('id, name, sku, price, stock, category_id, categories(name)')
+    .order('created_at', { ascending: false })
+    .limit(10)
+
+  const lowStock = lowStockProducts ?? []
+  const products = recentProducts ?? []
 
   const stats = [
-    { label: 'Toplam Ürün', value: totalProducts, icon: Package, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Toplam Sipariş (Demo)', value: 142, icon: ShoppingBag, color: 'text-green-600', bg: 'bg-green-50' },
-    { label: 'Aylık Ciro (Demo)', value: '₺485.200', icon: TrendingUp, color: 'text-primary', bg: 'bg-red-50' },
-    { label: 'Düşük Stok', value: lowStock.length, icon: AlertTriangle, color: 'text-yellow-600', bg: 'bg-yellow-50' },
+    { label: 'Toplam Ürün', value: totalProducts ?? 0, icon: Package, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: 'Toplam Sipariş', value: totalOrders ?? 0, icon: ShoppingBag, color: 'text-green-600', bg: 'bg-green-50' },
+    { label: 'Toplam Ciro', value: `₺${totalRevenue.toLocaleString('tr-TR')}`, icon: TrendingUp, color: 'text-primary', bg: 'bg-red-50' },
+    { label: 'Düşük Stok', value: lowStock.length + (outOfStockCount ?? 0), icon: AlertTriangle, color: 'text-yellow-600', bg: 'bg-yellow-50' },
   ]
 
   return (
@@ -49,7 +93,7 @@ export default function AdminDashboard() {
               </div>
             </div>
             <p className="font-headline font-bold text-2xl text-on-surface">
-              {typeof value === 'number' && label !== 'Aylık Ciro (Demo)' ? value.toLocaleString('tr-TR') : value}
+              {typeof value === 'number' ? value.toLocaleString('tr-TR') : value}
             </p>
           </div>
         ))}
@@ -63,7 +107,7 @@ export default function AdminDashboard() {
             <h2 className="font-semibold text-yellow-800">Stok Uyarısı — {lowStock.length} ürün</h2>
           </div>
           <div className="space-y-2">
-            {lowStock.map((p) => (
+            {lowStock.map((p: any) => (
               <div key={p.id} className="flex items-center justify-between text-sm">
                 <span className="text-yellow-800">{p.name}</span>
                 <span className="font-bold text-yellow-700">{p.stock} adet kaldı</span>
@@ -76,7 +120,7 @@ export default function AdminDashboard() {
       {/* Recent Products Table */}
       <div className="bg-white border border-surface-container">
         <div className="flex items-center justify-between px-5 py-4 border-b border-surface-container">
-          <h2 className="font-headline font-bold text-on-surface">Ürünler</h2>
+          <h2 className="font-headline font-bold text-on-surface">Son Eklenen Ürünler</h2>
           <Link href="/admin/urunler" className="text-sm text-primary hover:underline">
             Tümünü Gör →
           </Link>
@@ -93,19 +137,24 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-container">
-              {MOCK_PRODUCTS.slice(0, 8).map((product) => {
-                const cat = MOCK_CATEGORIES.find((c) => c.id === product.category_id)
-                return (
+              {products.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-8 text-center text-secondary">
+                    Henüz ürün bulunamadı.
+                  </td>
+                </tr>
+              ) : (
+                products.map((product: any) => (
                   <tr key={product.id} className="hover:bg-surface-container-low transition-colors">
                     <td className="px-5 py-3">
                       <p className="font-medium text-on-surface">{product.name}</p>
-                      <p className="text-xs text-secondary">{product.sku}</p>
+                      <p className="text-xs text-secondary">{product.sku ?? '—'}</p>
                     </td>
                     <td className="px-5 py-3 text-secondary hidden md:table-cell">
-                      {cat?.name ?? '—'}
+                      {product.categories?.name ?? '—'}
                     </td>
                     <td className="px-5 py-3 text-right font-semibold text-on-surface">
-                      {product.price.toLocaleString('tr-TR')} ₺
+                      {Number(product.price).toLocaleString('tr-TR')} ₺
                     </td>
                     <td className="px-5 py-3 text-right">
                       <span
@@ -122,15 +171,15 @@ export default function AdminDashboard() {
                     </td>
                     <td className="px-5 py-3 text-right">
                       <Link
-                        href={`/admin/urunler?edit=${product.id}`}
+                        href={`/admin/urunler/${product.id}/duzenle`}
                         className="text-sm text-primary hover:underline"
                       >
                         Düzenle
                       </Link>
                     </td>
                   </tr>
-                )
-              })}
+                ))
+              )}
             </tbody>
           </table>
         </div>

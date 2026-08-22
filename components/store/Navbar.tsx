@@ -18,7 +18,6 @@ const MENU_STRUCTURE = [
     children: [
       { label: 'Dağ Bisikleti', href: '/kategori/dag-bisikleti' },
       { label: 'Şehir Bisikleti', href: '/kategori/sehir-bisikleti' },
-      { label: 'Yol Yarış Bisikleti', href: '/kategori/yol-yaris-bisikleti' },
       { label: 'Çocuk Bisikleti', href: '/kategori/cocuk-bisikleti' },
     ],
   },

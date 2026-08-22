@@ -5,7 +5,6 @@ const FOOTER_LINKS = {
   bisikletler: [
     { label: 'Dağ Bisikleti', href: '/kategori/dag-bisikleti' },
     { label: 'Şehir Bisikleti', href: '/kategori/sehir-bisikleti' },
-    { label: 'Yol Yarış Bisikleti', href: '/kategori/yol-yaris-bisikleti' },
     { label: 'Çocuk Bisikleti', href: '/kategori/cocuk-bisikleti' },
     { label: 'Elektrikli Bisiklet', href: '/kategori/elektrikli-bisiklet' },
   ],
