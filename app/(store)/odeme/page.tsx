@@ -40,6 +40,7 @@ export default function CheckoutPage() {
   const [orderError, setOrderError] = useState<string | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
+  const [iyzicoFormHtml, setIyzicoFormHtml] = useState<string | null>(null)
   const router = useRouter()
 
   const [address, setAddress] = useState<AddressForm>({
@@ -79,10 +80,11 @@ export default function CheckoutPage() {
     setStep('confirm')
   }
 
-  // Siparişi Supabase'e kaydet → /api/orders endpoint'i
-  const handlePlaceOrder = async () => {
+  // İyzico Checkout Form başlat
+  const handleStartPayment = async () => {
     setPlacing(true)
     setOrderError(null)
+    setIyzicoFormHtml(null)
 
     try {
       const orderItems = items.map(item => ({
@@ -90,19 +92,15 @@ export default function CheckoutPage() {
         product_name: item.product.name,
         quantity: item.quantity,
         unit_price: item.product.price,
-        variant_id: null,
-        selected_frame_size: item.selectedFrameSize ?? null,
-        selected_color: item.selectedColor ?? null,
+        category: 'Bisiklet',
       }))
 
-      const res = await fetch('/api/orders', {
+      const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
           customer_email: finalEmail,
-          customer_name: address.full_name,
-          customer_phone: address.phone,
           shipping_address: {
             full_name: address.full_name,
             phone: address.phone,
@@ -113,19 +111,20 @@ export default function CheckoutPage() {
             postal_code: address.postal_code,
           },
           items: orderItems,
-          subtotal,
           shipping_fee: shippingFee,
-          total,
-          payment_method: 'kapida_odeme',
-          status: 'pending',
         }),
       })
 
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Sipariş oluşturulamadı.')
+      if (!res.ok) throw new Error(data.error ?? 'Ödeme başlatılamadı.')
 
-      clearCart()
-      window.location.href = '/odeme/basarili'
+      // İyzico'dan dönen form HTML'ini göster
+      if (data.checkoutFormContent) {
+        setIyzicoFormHtml(data.checkoutFormContent)
+        clearCart()
+      } else {
+        throw new Error('İyzico form içeriği alınamadı.')
+      }
     } catch (err: unknown) {
       setOrderError(err instanceof Error ? err.message : 'Beklenmeyen bir hata oluştu.')
     } finally {
@@ -414,79 +413,115 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              {/* Ödeme yöntemi */}
-              <div className="border border-surface-container bg-white p-5">
-                <p className="text-sm font-bold text-on-surface mb-3">Ödeme Yöntemi</p>
-                <div className="flex items-center gap-3 p-4 border-2 border-primary bg-red-50">
-                  <div className="w-9 h-9 bg-primary flex items-center justify-center flex-shrink-0">
-                    <Lock className="w-4 h-4 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-on-surface">Kapıda Ödeme</p>
-                    <p className="text-xs text-secondary mt-0.5">Nakit veya kart ile teslimatta ödeme yapın.</p>
-                  </div>
+              {/* İyzico Ödeme Formu */}
+              {iyzicoFormHtml ? (
+                <div className="border border-surface-container bg-white p-5">
+                  <p className="text-sm font-bold text-on-surface mb-3">💳 Ödeme Bilgilerinizi Girin</p>
+                  <div
+                    id="iyzipay-checkout-form"
+                    className="w-full"
+                    ref={(el) => {
+                      if (el && iyzicoFormHtml) {
+                        el.innerHTML = iyzicoFormHtml
+                        // İyzico script'lerini çalıştır
+                        const scripts = el.querySelectorAll('script')
+                        scripts.forEach((oldScript) => {
+                          const newScript = document.createElement('script')
+                          if (oldScript.src) {
+                            newScript.src = oldScript.src
+                          } else {
+                            newScript.textContent = oldScript.textContent
+                          }
+                          oldScript.parentNode?.replaceChild(newScript, oldScript)
+                        })
+                      }
+                    }}
+                  />
                 </div>
-              </div>
+              ) : (
+                <>
+                  {/* Ödeme yöntemi bilgisi */}
+                  <div className="border border-surface-container bg-white p-5">
+                    <p className="text-sm font-bold text-on-surface mb-3">Ödeme Yöntemi</p>
+                    <div className="flex items-center gap-3 p-4 border-2 border-primary bg-red-50">
+                      <div className="w-9 h-9 bg-primary flex items-center justify-center flex-shrink-0">
+                        <Lock className="w-4 h-4 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-on-surface">Kredi / Banka Kartı ile Öde</p>
+                        <p className="text-xs text-secondary mt-0.5">İyzico güvencesiyle güvenli ödeme yapın.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 mt-3">
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-surface-container-low border border-surface-container">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M2 6l8 6-8 6V6z" fill="url(#iz1)" /><defs><linearGradient id="iz1" x1="2" y1="6" x2="2" y2="18"><stop stopColor="#7DB9FF" /><stop offset="1" stopColor="#3A56FF" /></linearGradient></defs></svg>
+                        <span className="text-[11px] font-bold text-[#3A56FF]">iyzico</span>
+                      </div>
+                      <span className="text-[11px] text-secondary">ile güvenli ödeme</span>
+                    </div>
+                  </div>
 
-              {/* Hata */}
-              {orderError && (
-                <div className="p-4 bg-red-50 border border-red-200 text-primary text-sm font-medium">
-                  {orderError}
-                </div>
-              )}
-
-              {/* Zorunlu Sözleşme Onayı */}
-              <label className="flex items-start gap-3 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  id="contract-agreement"
-                  required
-                  className="w-4 h-4 mt-0.5 accent-primary flex-shrink-0 cursor-pointer"
-                  onChange={e => {
-                    const btn = document.getElementById('place-order-btn') as HTMLButtonElement | null
-                    if (btn) btn.disabled = !e.target.checked || placing
-                  }}
-                />
-                <span className="text-sm text-secondary leading-relaxed">
-                  <a
-                    href="/mesafeli-satis-sozlesmesi"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary font-semibold hover:underline"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    Mesafeli Satış Sözleşmesi
-                  </a>
-                  &apos;ni ve{' '}
-                  <a
-                    href="/mesafeli-satis-sozlesmesi"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary font-semibold hover:underline"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    Ön Bilgilendirme Formu
-                  </a>
-                  &apos;nu okudum ve onaylıyorum.{' '}
-                  <span className="text-primary font-semibold">*</span>
-                </span>
-              </label>
-
-              <div className="flex gap-3">
-                <button type="button" onClick={() => setStep('address')} className="btn-outline">Geri</button>
-                <button
-                  onClick={handlePlaceOrder}
-                  disabled={placing}
-                  className="btn-primary flex-1 justify-center disabled:opacity-60"
-                  id="place-order-btn"
-                >
-                  {placing ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" />Sipariş Oluşturuluyor...</>
-                  ) : (
-                    <><CheckCircle className="w-4 h-4" />Siparişi Onayla — {formatPrice(total)}</>
+                  {/* Hata */}
+                  {orderError && (
+                    <div className="p-4 bg-red-50 border border-red-200 text-primary text-sm font-medium">
+                      {orderError}
+                    </div>
                   )}
-                </button>
-              </div>
+
+                  {/* Zorunlu Sözleşme Onayı */}
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      id="contract-agreement"
+                      required
+                      className="w-4 h-4 mt-0.5 accent-primary flex-shrink-0 cursor-pointer"
+                      onChange={e => {
+                        const btn = document.getElementById('place-order-btn') as HTMLButtonElement | null
+                        if (btn) btn.disabled = !e.target.checked || placing
+                      }}
+                    />
+                    <span className="text-sm text-secondary leading-relaxed">
+                      <a
+                        href="/mesafeli-satis-sozlesmesi"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary font-semibold hover:underline"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        Mesafeli Satış Sözleşmesi
+                      </a>
+                      &apos;ni ve{' '}
+                      <a
+                        href="/mesafeli-satis-sozlesmesi"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary font-semibold hover:underline"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        Ön Bilgilendirme Formu
+                      </a>
+                      &apos;nu okudum ve onaylıyorum.{' '}
+                      <span className="text-primary font-semibold">*</span>
+                    </span>
+                  </label>
+
+                  <div className="flex gap-3">
+                    <button type="button" onClick={() => setStep('address')} className="btn-outline">Geri</button>
+                    <button
+                      onClick={handleStartPayment}
+                      disabled={placing}
+                      className="btn-primary flex-1 justify-center disabled:opacity-60"
+                      id="place-order-btn"
+                    >
+                      {placing ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" />Ödeme Hazırlanıyor...</>
+                      ) : (
+                        <><Lock className="w-4 h-4" />Ödemeye Geç — {formatPrice(total)}</>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

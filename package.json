@@ -13,6 +13,7 @@
     "@supabase/ssr": "^0.4.0",
     "@supabase/supabase-js": "^2.44.4",
     "clsx": "^2.1.1",
+    "iyzipay": "^2.0.69",
     "lucide-react": "^0.408.0",
     "next": "^16.2.9",
     "react": "^19.2.7",
