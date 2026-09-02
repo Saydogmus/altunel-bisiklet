@@ -1,23 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
 import { retrieveCheckoutForm, confirmThreedsPayment } from '@/lib/iyzico'
-import { createServiceClient } from '@/lib/supabase/server'
 
 /**
  * POST /api/checkout/callback — İyzico ödeme sonucu callback.
  *
- * İyzico forceThreeDS:1 ile Checkout Form kullandığında TWO-STEP akış çalışır:
- *
- * ADIM 1 (Banka → Bizim callback):
- *   Banka 3DS onayı sonrası callbackUrl'e paymentId + conversationData gönderir.
- *   → confirmThreedsPayment(paymentId) çağrılarak ödeme tamamlanır.
- *
- * ADIM 2 (Checkout Form retrieve — token varsa):
- *   Sadece token ile ödeme sorgulanır (3DS'siz checkout form akışında kullanılır).
- *
- * Her iki akış da desteklenir.
- * Supabase hatası ödeme alındıysa sistemi çökertemez.
- * Tüm teknik hata detayları URL parametresinde iletilir.
+ * ÖNEMLİ: İyzico bu endpoint'e kendi sunucularından POST atar.
+ * Müşteri cookie'si taşımaz. Bu yüzden Supabase işlemlerinde
+ * next/headers bağımlısı createServiceClient değil, doğrudan
+ * @supabase/supabase-js ile service_role admin client kullanılır.
+ * Bu sayede RLS tamamen bypass edilerek sipariş kaydı güvenle yapılır.
  */
+
+/** Cookie gerektirmeyen, RLS bypass eden Supabase admin client */
+function createAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!url || !key) {
+    throw new Error('Supabase URL veya SERVICE_ROLE_KEY eksik')
+  }
+
+  return createSupabaseAdminClient(url, key, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+}
+
 export async function POST(req: NextRequest) {
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')
 
@@ -86,7 +97,7 @@ export async function POST(req: NextRequest) {
   let orderId: string | null = null
 
   try {
-    const supabase = createServiceClient()
+    const supabase = createAdminClient()
 
     // Token veya paymentId ile eşleşen awaiting_payment siparişini bul
     const lookupToken = token || paymentId
