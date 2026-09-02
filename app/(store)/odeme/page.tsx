@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -11,6 +11,38 @@ import {
 import { useCartStore } from '@/store/cartStore'
 import { formatPrice } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
+
+/**
+ * İyzico Checkout Form HTML'ini güvenli şekilde render eden bileşen.
+ * Script etiketleri dinamik olarak yeniden oluşturulup çalıştırılır.
+ */
+function IyzicoFormRenderer({ html }: { html: string }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || !html) return
+
+    // HTML'i yerleştir
+    el.innerHTML = html
+
+    // Script etiketlerini bul ve yeniden oluştur (innerHTML ile eklenen script'ler çalışmaz)
+    const scripts = el.querySelectorAll('script')
+    scripts.forEach((oldScript) => {
+      const newScript = document.createElement('script')
+      // Tüm attribute'ları kopyala
+      Array.from(oldScript.attributes).forEach((attr) => {
+        newScript.setAttribute(attr.name, attr.value)
+      })
+      if (!oldScript.src) {
+        newScript.textContent = oldScript.textContent
+      }
+      oldScript.parentNode?.replaceChild(newScript, oldScript)
+    })
+  }, [html])
+
+  return <div ref={containerRef} id="iyzipay-checkout-form" className="w-full min-h-[400px]" />
+}
 
 const TURKEY_CITIES = [
   "Adana", "Adıyaman", "Afyonkarahisar", "Ağrı", "Amasya", "Ankara", "Antalya", "Artvin", "Aydın", "Balıkesir", "Bilecik", "Bingöl", "Bitlis", "Bolu", "Burdur", "Bursa", "Çanakkale", "Çankırı", "Çorum", "Denizli", "Diyarbakır", "Edirne", "Elazığ", "Erzincan", "Erzurum", "Eskişehir", "Gaziantep", "Giresun", "Gümüşhane", "Hakkari", "Hatay", "Isparta", "Mersin", "İstanbul", "İzmir", "Kars", "Kastamonu", "Kayseri", "Kırklareli", "Kırşehir", "Kocaeli", "Konya", "Kütahya", "Malatya", "Manisa", "Kahramanmaraş", "Mardin", "Muğla", "Muş", "Nevşehir", "Niğde", "Ordu", "Rize", "Sakarya", "Samsun", "Siirt", "Sinop", "Sivas", "Tekirdağ", "Tokat", "Trabzon", "Tunceli", "Şanlıurfa", "Uşak", "Van", "Yozgat", "Zonguldak", "Aksaray", "Bayburt", "Karaman", "Kırıkkale", "Batman", "Şırnak", "Bartın", "Ardahan", "Iğdır", "Yalova", "Karabük", "Kilis", "Osmaniye", "Düzce"
@@ -118,10 +150,10 @@ export default function CheckoutPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Ödeme başlatılamadı.')
 
-      // İyzico'dan dönen form HTML'ini göster
+      // İyzico'dan dönen form HTML'ini göster (kart formu burada açılacak)
       if (data.checkoutFormContent) {
         setIyzicoFormHtml(data.checkoutFormContent)
-        clearCart()
+        // NOT: clearCart() burada yapılmaz — sadece ödeme başarılı olursa (/odeme/basarili) yapılır
       } else {
         throw new Error('İyzico form içeriği alınamadı.')
       }
@@ -416,27 +448,8 @@ export default function CheckoutPage() {
               {/* İyzico Ödeme Formu */}
               {iyzicoFormHtml ? (
                 <div className="border border-surface-container bg-white p-5">
-                  <p className="text-sm font-bold text-on-surface mb-3">💳 Ödeme Bilgilerinizi Girin</p>
-                  <div
-                    id="iyzipay-checkout-form"
-                    className="w-full"
-                    ref={(el) => {
-                      if (el && iyzicoFormHtml) {
-                        el.innerHTML = iyzicoFormHtml
-                        // İyzico script'lerini çalıştır
-                        const scripts = el.querySelectorAll('script')
-                        scripts.forEach((oldScript) => {
-                          const newScript = document.createElement('script')
-                          if (oldScript.src) {
-                            newScript.src = oldScript.src
-                          } else {
-                            newScript.textContent = oldScript.textContent
-                          }
-                          oldScript.parentNode?.replaceChild(newScript, oldScript)
-                        })
-                      }
-                    }}
-                  />
+                  <p className="text-sm font-bold text-on-surface mb-3">💳 Kart Bilgilerinizi Girin</p>
+                  <IyzicoFormRenderer html={iyzicoFormHtml} />
                 </div>
               ) : (
                 <>

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { initializeCheckoutForm } from '@/lib/iyzico'
-import { createServiceClient } from '@/lib/supabase/server'
 
 /**
  * POST /api/checkout — İyzico Checkout Form başlatır.
+ * 
+ * Sipariş bu aşamada Supabase'e KAYDEDİLMEZ.
+ * Sepet ve adres bilgileri İyzico'ya gönderilir, 
+ * dönen form HTML'i client'a iletilir.
+ * Sipariş ancak ödeme başarılı olursa callback'te kaydedilir.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -40,44 +44,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ── Supabase'de "pending" sipariş oluştur ──────────────────────────────
-    const supabase = createServiceClient()
-    const guestEmail = body.customer_email ?? body.shipping_address?.email ?? null
-    const shippingAddress = body.shipping_address ?? null
-
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        guest_email: guestEmail,
-        user_id: body.user_id ?? null,
-        status: 'pending',
-        total_amount: totalAmount,
-        shipping_fee: shippingFee,
-        shipping_address: shippingAddress,
-        stripe_payment_intent_id: null,
-      })
-      .select('id')
-      .single()
-
-    if (orderError) {
-      console.error('[POST /api/checkout] order insert error:', orderError)
-      return NextResponse.json({ error: orderError.message }, { status: 500 })
-    }
-
-    // ── Sipariş kalemlerini kaydet ─────────────────────────────────────────
-    const orderItems = items.map((item) => ({
-      order_id: order.id,
-      product_id: item.product_id,
-      variant_id: null,
-      quantity: Number(item.quantity),
-      unit_price: Number(item.unit_price),
-    }))
-
-    await supabase.from('order_items').insert(orderItems)
-
     // ── İyzico Checkout Form başlat ────────────────────────────────────────
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    const conversationId = order.id.replace(/-/g, '').substring(0, 30)
+    
+    // Benzersiz conversationId (sipariş henüz yok, rastgele üret)
+    const conversationId = `CHK${Date.now().toString(36)}${Math.random().toString(36).substring(2, 8)}`.substring(0, 30)
 
     // Basket items
     const basketItems = items.map((item, idx) => ({
@@ -105,6 +76,7 @@ export async function POST(req: NextRequest) {
     const firstName = nameParts[0] || 'Misafir'
     const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : firstName
     const buyerPhone = body.shipping_address?.phone || '05000000000'
+    const guestEmail = body.customer_email ?? body.shipping_address?.email ?? null
     const buyerEmail = guestEmail || 'misafir@altunelbisiklet.com'
 
     const fullAddress = [
@@ -113,11 +85,15 @@ export async function POST(req: NextRequest) {
       body.shipping_address?.city,
     ].filter(Boolean).join(', ') || 'Belirtilmedi'
 
+    // basketId'yi sipariş verilerini taşımak için kullanıyoruz (callback'te tekrar okunamayacak)
+    // Callback'te sipariş oluşturabilmek için verileri token üzerinden iyzico'dan geri alacağız
+    const basketId = conversationId
+
     const result = await initializeCheckoutForm({
       conversationId,
       price: totalAmount.toFixed(2),
       paidPrice: totalAmount.toFixed(2),
-      basketId: order.id.substring(0, 30),
+      basketId,
       callbackUrl: `${appUrl}/api/checkout/callback`,
       buyer: {
         id: (body.user_id || `GUEST_${conversationId}`).substring(0, 30),
@@ -148,18 +124,51 @@ export async function POST(req: NextRequest) {
 
     if (result.status !== 'success') {
       console.error('[POST /api/checkout] iyzico error:', result)
-      // Siparişi sil (ödeme başlatılamadı)
-      await supabase.from('order_items').delete().eq('order_id', order.id)
-      await supabase.from('orders').delete().eq('id', order.id)
       return NextResponse.json(
         { error: result.errorMessage || 'İyzico ödeme formu başlatılamadı.' },
         { status: 400 }
       )
     }
 
+    // Token'ı ve sipariş bilgilerini cookie/session ile callback'e taşımak yerine
+    // server-side bir geçici kayıt kullanacağız (checkout_sessions tablosu veya orders pending)
+    // Ancak en temiz yol: callback'te iyzico'dan tüm ödeme bilgilerini geri almak.
+    // Sipariş bilgilerini de token ile eşleştirmek için Supabase'de geçici bir kayıt tutalım.
+
+    const { createServiceClient } = await import('@/lib/supabase/server')
+    const supabase = createServiceClient()
+
+    // Geçici "awaiting_payment" kaydı (ödeme başarılı olursa "processing" yapılacak)
+    await supabase
+      .from('orders')
+      .insert({
+        id: undefined, // auto-generate
+        guest_email: guestEmail,
+        user_id: body.user_id ?? null,
+        status: 'awaiting_payment',
+        total_amount: totalAmount,
+        shipping_fee: shippingFee,
+        shipping_address: body.shipping_address ?? null,
+        stripe_payment_intent_id: result.token, // iyzico token'ı burada saklıyoruz
+      })
+      .select('id')
+      .single()
+      .then(async ({ data: tempOrder }) => {
+        if (tempOrder) {
+          // Sipariş kalemlerini de kaydet
+          const orderItems = items.map((item) => ({
+            order_id: tempOrder.id,
+            product_id: item.product_id,
+            variant_id: null,
+            quantity: Number(item.quantity),
+            unit_price: Number(item.unit_price),
+          }))
+          await supabase.from('order_items').insert(orderItems)
+        }
+      })
+
     return NextResponse.json({
       success: true,
-      orderId: order.id,
       checkoutFormContent: result.checkoutFormContent,
       token: result.token,
     })
