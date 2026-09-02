@@ -4,6 +4,10 @@ import crypto from 'crypto'
  * İyzico REST API client — sunucu tarafında (API routes) kullanılır.
  * iyzipay npm paketi Next.js bundler ile uyumsuz olduğu için
  * doğrudan REST API çağrısı yapılır.
+ * 
+ * İmza algoritması: IYZWSv2
+ * hashStr = sha256(secretKey, randomKey + uriPath + requestBody)
+ * authorization = "IYZWSv2 " + base64("apiKey:API_KEY&randomKey:RND&signature:HASH")
  */
 
 const IYZICO_BASE_URL = 'https://api.iyzipay.com'
@@ -11,18 +15,20 @@ const IYZICO_BASE_URL = 'https://api.iyzipay.com'
 function generateAuthorizationHeader(
   apiKey: string,
   secretKey: string,
-  randomHeaderValue: string,
+  randomKey: string,
+  uriPath: string,
   requestBody: string
 ): string {
-  const hashStr = `${randomHeaderValue}${requestBody}`
+  // İyzico IYZWSv2: HMAC-SHA256(secretKey, randomKey + uriPath + requestBody)
+  const payload = randomKey + uriPath + requestBody
   const signature = crypto
     .createHmac('sha256', secretKey)
-    .update(hashStr)
+    .update(payload)
     .digest('hex')
-  
-  const authorizationParams = `apiKey:${apiKey}&randomKey:${randomHeaderValue}&signature:${signature}`
-  const base64 = Buffer.from(authorizationParams).toString('base64')
-  
+
+  const authStr = `apiKey:${apiKey}&randomKey:${randomKey}&signature:${signature}`
+  const base64 = Buffer.from(authStr).toString('base64')
+
   return `IYZWSv2 ${base64}`
 }
 
@@ -41,11 +47,12 @@ async function iyzicoRequest(path: string, body: object) {
   }
 
   const requestBody = JSON.stringify(body)
-  const randomHeaderValue = getRandomString()
+  const randomKey = getRandomString()
   const authorization = generateAuthorizationHeader(
     apiKey,
     secretKey,
-    randomHeaderValue,
+    randomKey,
+    path,
     requestBody
   )
 
@@ -55,7 +62,8 @@ async function iyzicoRequest(path: string, body: object) {
       Accept: 'application/json',
       'Content-Type': 'application/json',
       Authorization: authorization,
-      'x-iyzi-rnd': randomHeaderValue,
+      'x-iyzi-rnd': randomKey,
+      'x-iyzi-client-version': 'iyzipay-node-2.0.56',
     },
     body: requestBody,
   })
