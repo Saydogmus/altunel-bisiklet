@@ -45,7 +45,9 @@ export async function POST(req: NextRequest) {
     }
 
     // ── İyzico Checkout Form başlat ────────────────────────────────────────
-    const appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+    let appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+    appUrl = appUrl.replace(/\/$/, '') // Sonda eğik çizgi varsa temizle (Çift // hatasını önlemek için)
+    
     const conversationId = `CHK${Date.now().toString(36)}${Math.random().toString(36).substring(2, 8)}`.substring(0, 30)
 
     // Basket items
