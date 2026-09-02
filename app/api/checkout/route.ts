@@ -89,6 +89,8 @@ export async function POST(req: NextRequest) {
     // Callback'te sipariş oluşturabilmek için verileri token üzerinden iyzico'dan geri alacağız
     const basketId = conversationId
 
+    const ipAddress = req.ip || req.headers.get('x-forwarded-for') || '85.34.78.112'
+
     const result = await initializeCheckoutForm({
       conversationId,
       price: totalAmount.toFixed(2),
@@ -101,9 +103,9 @@ export async function POST(req: NextRequest) {
         surname: lastName.substring(0, 30),
         gsmNumber: `+90${buyerPhone.replace(/\D/g, '').replace(/^0/, '').substring(0, 10)}`,
         email: buyerEmail.substring(0, 100),
-        identityNumber: '11111111111',
+        identityNumber: '74300864791', // İyzico'nun testler için kabul ettiği standart dummy TCKN
         registrationAddress: fullAddress.substring(0, 300),
-        ip: '85.34.78.112',
+        ip: ipAddress,
         city: (body.shipping_address?.city || 'Istanbul').substring(0, 30),
         country: 'Turkey',
       },
