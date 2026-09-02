@@ -1,98 +1,160 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { retrieveCheckoutForm } from '@/lib/iyzico'
+import { retrieveCheckoutForm, confirmThreedsPayment } from '@/lib/iyzico'
 import { createServiceClient } from '@/lib/supabase/server'
 
 /**
  * POST /api/checkout/callback — İyzico ödeme sonucu callback.
  *
- * İyzico, ödeme tamamlandığında bu URL'e application/x-www-form-urlencoded
- * formatında POST gönderir (JSON değil). İki yöntemle parse edilir:
- * 1. req.formData() — modern Next.js App Router
- * 2. raw text parse — form-urlencoded fallback
+ * İyzico forceThreeDS:1 ile Checkout Form kullandığında TWO-STEP akış çalışır:
+ *
+ * ADIM 1 (Banka → Bizim callback):
+ *   Banka 3DS onayı sonrası callbackUrl'e paymentId + conversationData gönderir.
+ *   → confirmThreedsPayment(paymentId) çağrılarak ödeme tamamlanır.
+ *
+ * ADIM 2 (Checkout Form retrieve — token varsa):
+ *   Sadece token ile ödeme sorgulanır (3DS'siz checkout form akışında kullanılır).
+ *
+ * Her iki akış da desteklenir.
+ * Supabase hatası ödeme alındıysa sistemi çökertemez.
+ * Tüm teknik hata detayları URL parametresinde iletilir.
  */
 export async function POST(req: NextRequest) {
-  // Yönlendirme için sabit site URL'si (req.url kullanmak hatalı yönlendirmeye yol açar)
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')
 
-  let token: string | null = null
-
+  // ── 1. Form verisini parse et (application/x-www-form-urlencoded) ───────
+  let params: URLSearchParams
   try {
     const contentType = req.headers.get('content-type') || ''
-
     if (contentType.includes('application/x-www-form-urlencoded')) {
-      // İyzico'nun gönderdiği format: form-urlencoded
       const rawText = await req.text()
-      const params = new URLSearchParams(rawText)
-      token = params.get('token')
-    } else if (contentType.includes('multipart/form-data') || contentType.includes('application/form-data')) {
-      // Multipart form fallback
-      const formData = await req.formData()
-      token = formData.get('token') as string | null
+      params = new URLSearchParams(rawText)
     } else {
-      // Son çare: her iki yöntemi dene
-      try {
-        const rawText = await req.text()
-        const params = new URLSearchParams(rawText)
-        token = params.get('token')
-      } catch {
-        const formData = await req.formData()
-        token = formData.get('token') as string | null
-      }
+      // Fallback: formData
+      const formData = await req.formData()
+      params = new URLSearchParams()
+      formData.forEach((value, key) => {
+        params.set(key, value.toString())
+      })
     }
+  } catch (parseErr: any) {
+    console.error('[Callback] Form parse hatası:', parseErr?.message)
+    return NextResponse.redirect(
+      `${siteUrl}/odeme/iptal?detay=${encodeURIComponent('form_parse_hatasi:' + (parseErr?.message || 'bilinmiyor'))}`
+    )
+  }
 
-    console.log('[Callback] Content-Type:', contentType, '| Token:', token ? token.substring(0, 20) + '...' : 'YOK')
+  const paymentId       = params.get('paymentId') || ''
+  const token           = params.get('token') || ''
+  const conversationData = params.get('conversationData') || ''
+  const conversationId  = params.get('conversationId') || ''
+  const status          = params.get('status') || ''
 
-    if (!token) {
-      console.error('[Callback] Token bulunamadı')
-      return NextResponse.redirect(`${siteUrl}/odeme/iptal?error=Token%20bulunamad%C4%B1`)
+  console.log('[Callback] Gelen params → paymentId:', paymentId, '| token:', token ? token.substring(0, 15) + '...' : 'YOK', '| status:', status)
+
+  // ── 2. İyzico ile ödeme sonucunu doğrula ──────────────────────────────────
+  let paymentResult: any
+
+  try {
+    if (paymentId) {
+      // ADIM 1 — 3DS ikinci onay (forceThreeDS:1 akışı)
+      console.log('[Callback] paymentId mevcut → confirmThreedsPayment çağrılıyor')
+      paymentResult = await confirmThreedsPayment({ paymentId, conversationData, conversationId })
+    } else if (token) {
+      // ADIM 2 — Checkout Form token sorgulama (3DS'siz akış)
+      console.log('[Callback] token mevcut → retrieveCheckoutForm çağrılıyor')
+      paymentResult = await retrieveCheckoutForm(token)
+    } else {
+      console.error('[Callback] Ne paymentId ne token geldi — params:', params.toString())
+      return NextResponse.redirect(
+        `${siteUrl}/odeme/iptal?detay=${encodeURIComponent('odeme_parametresi_eksik')}`
+      )
     }
+  } catch (iyzicoErr: any) {
+    console.error('[Callback] İyzico API hatası:', iyzicoErr?.message)
+    return NextResponse.redirect(
+      `${siteUrl}/odeme/iptal?detay=${encodeURIComponent('iyzico_api_hatasi:' + (iyzicoErr?.message || 'bilinmiyor'))}`
+    )
+  }
 
-    // İyzico'dan ödeme sonucunu sorgula
-    const result = await retrieveCheckoutForm(token)
+  console.log('[Callback] İyzico sonuç → status:', paymentResult?.status, '| paymentStatus:', paymentResult?.paymentStatus, '| errorCode:', paymentResult?.errorCode, '| errorMessage:', paymentResult?.errorMessage)
 
-    console.log('[Callback] İyzico status:', result.status, '| paymentStatus:', result.paymentStatus, '| errorCode:', result.errorCode)
+  const isSuccess =
+    paymentResult?.status === 'success' &&
+    (paymentResult?.paymentStatus === 'SUCCESS' || paymentResult?.paymentStatus === 'INIT_THREEDS')
 
+  // ── 3. Supabase sipariş güncelleme (hata olursa çökmez) ──────────────────
+  let orderId: string | null = null
+
+  try {
     const supabase = createServiceClient()
 
-    // Token ile eşleşen awaiting_payment siparişi bul
+    // Token veya paymentId ile eşleşen awaiting_payment siparişini bul
+    const lookupToken = token || paymentId
     const { data: pendingOrder } = await supabase
       .from('orders')
       .select('id')
-      .eq('stripe_payment_intent_id', token)
+      .eq('stripe_payment_intent_id', lookupToken)
       .eq('status', 'awaiting_payment')
       .maybeSingle()
 
-    if (result.status === 'success' && result.paymentStatus === 'SUCCESS') {
-      // ── Ödeme başarılı ───────────────────────────────────────────────────
-      if (pendingOrder) {
-        await supabase
+    orderId = pendingOrder?.id || null
+
+    if (isSuccess) {
+      if (orderId) {
+        const { error: updateError } = await supabase
           .from('orders')
           .update({
             status: 'processing',
-            stripe_payment_intent_id: result.paymentId || token,
+            stripe_payment_intent_id: paymentResult?.paymentId || paymentId || token,
           })
-          .eq('id', pendingOrder.id)
+          .eq('id', orderId)
 
-        return NextResponse.redirect(`${siteUrl}/odeme/basarili?order=${pendingOrder.id}`)
+        if (updateError) {
+          console.error('[Callback] Supabase sipariş güncelleme hatası (ödeme alındı, sipariş güncellenemedi):', updateError.message)
+          // Ödeme alındı ama DB güncellenemedi → başarılı sayfasına git ama log tut
+        } else {
+          console.log('[Callback] Sipariş güncellendi → processing. ID:', orderId)
+        }
       } else {
-        console.warn('[Callback] Ödeme başarılı ama eşleşen sipariş bulunamadı. Token:', token)
-        return NextResponse.redirect(`${siteUrl}/odeme/basarili`)
+        console.warn('[Callback] Ödeme başarılı ama eşleşen awaiting_payment siparişi bulunamadı. token/paymentId:', lookupToken)
       }
     } else {
-      // ── Ödeme başarısız ──────────────────────────────────────────────────
-      if (pendingOrder) {
+      if (orderId) {
         await supabase
           .from('orders')
           .update({ status: 'cancelled' })
-          .eq('id', pendingOrder.id)
+          .eq('id', orderId)
+          .then(({ error }) => {
+            if (error) console.error('[Callback] Sipariş iptal güncellemesi başarısız:', error.message)
+          })
       }
-
-      const errorMsg = encodeURIComponent(result.errorMessage || 'Ödeme başarısız oldu.')
-      console.error('[Callback] Ödeme başarısız. Hata:', result.errorMessage, '| Kod:', result.errorCode)
-      return NextResponse.redirect(`${siteUrl}/odeme/iptal?error=${errorMsg}`)
     }
-  } catch (err: any) {
-    console.error('[Callback] Beklenmeyen hata:', err?.message || err)
-    return NextResponse.redirect(`${siteUrl}/odeme/iptal?error=Beklenmeyen%20bir%20hata%20olu%C5%9Ftu`)
+  } catch (dbErr: any) {
+    console.error('[Callback] Supabase kritik hata:', dbErr?.message)
+    // DB tamamen çökmüş — eğer ödeme alındıysa yine de başarılı sayfasına git
+    if (isSuccess) {
+      console.error('[Callback] UYARI: Ödeme alındı ama DB kaydedilemedi! paymentId:', paymentId, '| token:', token)
+      return NextResponse.redirect(
+        `${siteUrl}/odeme/basarili?detay=${encodeURIComponent('odeme_alindi_db_hatasi')}`
+      )
+    }
+    return NextResponse.redirect(
+      `${siteUrl}/odeme/iptal?detay=${encodeURIComponent('veritabani_hatasi:' + (dbErr?.message || 'bilinmiyor'))}`
+    )
+  }
+
+  // ── 4. Kullanıcıyı yönlendir ─────────────────────────────────────────────
+  if (isSuccess) {
+    const successUrl = orderId
+      ? `${siteUrl}/odeme/basarili?order=${orderId}`
+      : `${siteUrl}/odeme/basarili`
+    return NextResponse.redirect(successUrl)
+  } else {
+    const errorDetail = paymentResult?.errorCode
+      ? `${paymentResult.errorCode}:${paymentResult.errorMessage || 'odeme_reddedildi'}`
+      : (paymentResult?.errorMessage || 'odeme_basarisiz')
+    return NextResponse.redirect(
+      `${siteUrl}/odeme/iptal?detay=${encodeURIComponent(errorDetail)}`
+    )
   }
 }

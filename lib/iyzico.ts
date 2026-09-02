@@ -134,11 +134,29 @@ export async function initializeCheckoutForm(params: {
 }
 
 /**
- * İyzico Checkout Form sonucu sorgula
+ * İyzico Checkout Form sonucu sorgula (token ile)
  */
 export async function retrieveCheckoutForm(token: string) {
   return iyzicoRequest('/payment/iyzipos/checkoutform/auth/ecom/detail', {
     locale: 'tr',
     token,
+  })
+}
+
+/**
+ * İyzico 3D Secure ikinci adım — banka onayı sonrası paymentId ile ödemeyi tamamla.
+ * forceThreeDS: 1 ile başlatılan ödemelerde banka callbackUrl'e paymentId gönderir.
+ * Bu endpoint çağrılmadan ödeme tamamlanmaz.
+ */
+export async function confirmThreedsPayment(params: {
+  paymentId: string
+  conversationData?: string
+  conversationId?: string
+}) {
+  return iyzicoRequest('/payment/3dsecure/auth', {
+    locale: 'tr',
+    paymentId: params.paymentId,
+    conversationData: params.conversationData || '',
+    conversationId: params.conversationId || '',
   })
 }
