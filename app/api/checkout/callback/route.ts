@@ -4,26 +4,53 @@ import { createServiceClient } from '@/lib/supabase/server'
 
 /**
  * POST /api/checkout/callback — İyzico ödeme sonucu callback.
- * 
- * İyzico ödeme tamamlandığında bu URL'e POST ile token gönderir.
- * Token ile ödeme sonucu sorgulanır.
- * Başarılıysa → awaiting_payment siparişi "processing" yapılır.
- * Başarısızsa → awaiting_payment siparişi "cancelled" yapılır.
+ *
+ * İyzico, ödeme tamamlandığında bu URL'e application/x-www-form-urlencoded
+ * formatında POST gönderir (JSON değil). İki yöntemle parse edilir:
+ * 1. req.formData() — modern Next.js App Router
+ * 2. raw text parse — form-urlencoded fallback
  */
 export async function POST(req: NextRequest) {
+  // Yönlendirme için sabit site URL'si (req.url kullanmak hatalı yönlendirmeye yol açar)
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')
+
+  let token: string | null = null
+
   try {
-    const formData = await req.formData()
-    const token = formData.get('token') as string
+    const contentType = req.headers.get('content-type') || ''
+
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+      // İyzico'nun gönderdiği format: form-urlencoded
+      const rawText = await req.text()
+      const params = new URLSearchParams(rawText)
+      token = params.get('token')
+    } else if (contentType.includes('multipart/form-data') || contentType.includes('application/form-data')) {
+      // Multipart form fallback
+      const formData = await req.formData()
+      token = formData.get('token') as string | null
+    } else {
+      // Son çare: her iki yöntemi dene
+      try {
+        const rawText = await req.text()
+        const params = new URLSearchParams(rawText)
+        token = params.get('token')
+      } catch {
+        const formData = await req.formData()
+        token = formData.get('token') as string | null
+      }
+    }
+
+    console.log('[Callback] Content-Type:', contentType, '| Token:', token ? token.substring(0, 20) + '...' : 'YOK')
 
     if (!token) {
       console.error('[Callback] Token bulunamadı')
-      return NextResponse.redirect(new URL('/odeme/iptal?error=Token%20bulunamad%C4%B1', req.url))
+      return NextResponse.redirect(`${siteUrl}/odeme/iptal?error=Token%20bulunamad%C4%B1`)
     }
 
     // İyzico'dan ödeme sonucunu sorgula
     const result = await retrieveCheckoutForm(token)
 
-    console.log('[Callback] İyzico status:', result.status, 'paymentStatus:', result.paymentStatus)
+    console.log('[Callback] İyzico status:', result.status, '| paymentStatus:', result.paymentStatus, '| errorCode:', result.errorCode)
 
     const supabase = createServiceClient()
 
@@ -33,7 +60,7 @@ export async function POST(req: NextRequest) {
       .select('id')
       .eq('stripe_payment_intent_id', token)
       .eq('status', 'awaiting_payment')
-      .single()
+      .maybeSingle()
 
     if (result.status === 'success' && result.paymentStatus === 'SUCCESS') {
       // ── Ödeme başarılı ───────────────────────────────────────────────────
@@ -46,13 +73,10 @@ export async function POST(req: NextRequest) {
           })
           .eq('id', pendingOrder.id)
 
-        return NextResponse.redirect(
-          new URL(`/odeme/basarili?order=${pendingOrder.id}`, req.url)
-        )
+        return NextResponse.redirect(`${siteUrl}/odeme/basarili?order=${pendingOrder.id}`)
       } else {
-        // Token eşleşen sipariş bulunamazsa bile başarılı sayfasına yönlendir
         console.warn('[Callback] Ödeme başarılı ama eşleşen sipariş bulunamadı. Token:', token)
-        return NextResponse.redirect(new URL('/odeme/basarili', req.url))
+        return NextResponse.redirect(`${siteUrl}/odeme/basarili`)
       }
     } else {
       // ── Ödeme başarısız ──────────────────────────────────────────────────
@@ -64,14 +88,11 @@ export async function POST(req: NextRequest) {
       }
 
       const errorMsg = encodeURIComponent(result.errorMessage || 'Ödeme başarısız oldu.')
-      return NextResponse.redirect(
-        new URL(`/odeme/iptal?error=${errorMsg}`, req.url)
-      )
+      console.error('[Callback] Ödeme başarısız. Hata:', result.errorMessage, '| Kod:', result.errorCode)
+      return NextResponse.redirect(`${siteUrl}/odeme/iptal?error=${errorMsg}`)
     }
   } catch (err: any) {
-    console.error('[Callback] Unexpected error:', err)
-    return NextResponse.redirect(
-      new URL('/odeme/iptal?error=Beklenmeyen%20bir%20hata%20olu%C5%9Ftu', req.url)
-    )
+    console.error('[Callback] Beklenmeyen hata:', err?.message || err)
+    return NextResponse.redirect(`${siteUrl}/odeme/iptal?error=Beklenmeyen%20bir%20hata%20olu%C5%9Ftu`)
   }
 }
