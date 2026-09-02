@@ -45,9 +45,8 @@ export async function POST(req: NextRequest) {
     }
 
     // ── İyzico Checkout Form başlat ────────────────────────────────────────
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    
-    // Benzersiz conversationId (sipariş henüz yok, rastgele üret)
+    // Eğer NEXT_PUBLIC_APP_URL unutulmuşsa, isteğin geldiği asıl domaini kullanır (localhost hatasını önler)
+    const appUrl = req.nextUrl.origin || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     const conversationId = `CHK${Date.now().toString(36)}${Math.random().toString(36).substring(2, 8)}`.substring(0, 30)
 
     // Basket items
