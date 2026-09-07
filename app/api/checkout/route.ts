@@ -3,17 +3,15 @@ import { initializeCheckoutForm } from '@/lib/iyzico'
 
 /**
  * POST /api/checkout — İyzico Checkout Form başlatır.
- * 
+ *
  * Sipariş bu aşamada Supabase'e KAYDEDİLMEZ.
- * Sepet ve adres bilgileri İyzico'ya gönderilir, 
- * dönen form HTML'i client'a iletilir.
- * Sipariş ancak ödeme başarılı olursa callback'te kaydedilir.
+ * Ödeme başarılı olursa callback rotası siparişi kaydeder.
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
 
-    // ── Sepet doğrulama ────────────────────────────────────────────────────
+    // ── Sepet doğrulama ───────────────────────────────────────────────────
     const items: Array<{
       product_id: string
       product_name: string
@@ -23,13 +21,10 @@ export async function POST(req: NextRequest) {
     }> = body.items ?? []
 
     if (items.length === 0) {
-      return NextResponse.json(
-        { error: 'Sepet boş, ödeme başlatılamaz.' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Sepet boş, ödeme başlatılamaz.' }, { status: 400 })
     }
 
-    // ── Tutar hesaplama ────────────────────────────────────────────────────
+    // ── Tutar hesaplama ───────────────────────────────────────────────────
     const subtotal = items.reduce(
       (sum, item) => sum + (Number(item.unit_price) || 0) * (Number(item.quantity) || 0),
       0
@@ -38,59 +33,98 @@ export async function POST(req: NextRequest) {
     const totalAmount = subtotal + shippingFee
 
     if (!isFinite(totalAmount) || totalAmount <= 0) {
-      return NextResponse.json(
-        { error: `Geçersiz sipariş tutarı: ${totalAmount}` },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: `Geçersiz sipariş tutarı: ${totalAmount}` }, { status: 400 })
     }
 
-    // ── İyzico Checkout Form başlat ────────────────────────────────────────
-    let appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-    appUrl = appUrl.replace(/\/$/, '') // Sonda eğik çizgi varsa temizle (Çift // hatasını önlemek için)
-    
-    const conversationId = `CHK${Date.now().toString(36)}${Math.random().toString(36).substring(2, 8)}`.substring(0, 30)
+    // ── Türkçe karakter sanitize — iyzico ASCII gerektirir ────────────────
+    const toAscii = (s: string): string =>
+      (s || '')
+        .replace(/ş/g, 's').replace(/Ş/g, 'S')
+        .replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
+        .replace(/ı/g, 'i').replace(/İ/g, 'I')
+        .replace(/ö/g, 'o').replace(/Ö/g, 'O')
+        .replace(/ü/g, 'u').replace(/Ü/g, 'U')
+        .replace(/ç/g, 'c').replace(/Ç/g, 'C')
 
-    // Basket items
+    // ── Basket items ──────────────────────────────────────────────────────
     const basketItems = items.map((item, idx) => ({
       id: (item.product_id || `ITEM_${idx}`).substring(0, 30),
-      name: (item.product_name || 'Ürün').substring(0, 50),
-      category1: (item.category || 'Bisiklet').substring(0, 50),
+      name: toAscii(item.product_name || 'Urun').substring(0, 50),
+      category1: toAscii(item.category || 'Bisiklet').substring(0, 50),
       itemType: 'PHYSICAL',
       price: (Number(item.unit_price) * Number(item.quantity)).toFixed(2),
     }))
 
-    // Kargo ücreti de basket item olarak eklenmeli (iyzico: basketItems toplamı = price)
     if (shippingFee > 0) {
       basketItems.push({
         id: 'KARGO',
-        name: 'Kargo Ücreti',
+        name: 'Kargo Ucreti',
         category1: 'Kargo',
         itemType: 'PHYSICAL',
         price: shippingFee.toFixed(2),
       })
     }
 
-    // Buyer bilgileri
-    const buyerName = body.shipping_address?.full_name || 'Misafir'
-    const nameParts = buyerName.split(' ')
-    const firstName = nameParts[0] || 'Misafir'
-    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : firstName
-    const buyerPhone = body.shipping_address?.phone || '05000000000'
+    // ── Buyer bilgileri ───────────────────────────────────────────────────
+    const buyerName  = body.shipping_address?.full_name || 'Misafir'
+    const nameParts  = buyerName.trim().split(/\s+/)
+    const firstName  = toAscii(nameParts[0] || 'Misafir').substring(0, 30)
+    const lastName   = toAscii(nameParts.length > 1 ? nameParts.slice(1).join(' ') : nameParts[0]).substring(0, 30)
     const guestEmail = body.customer_email ?? body.shipping_address?.email ?? null
-    const buyerEmail = guestEmail || 'misafir@altunelbisiklet.com'
+    const buyerEmail = (guestEmail || 'misafir@altunelbisiklet.com').substring(0, 100)
+    const postalCode = body.shipping_address?.postal_code || '34000'
 
-    const fullAddress = [
+    // Telefon normalize: +905375597600 / 05375597600 / 5375597600 → +905375597600
+    const rawPhone   = (body.shipping_address?.phone || '05000000000').replace(/\D/g, '')
+    const localPhone = rawPhone.startsWith('90') ? rawPhone.slice(2)
+                     : rawPhone.startsWith('0')  ? rawPhone.slice(1)
+                     : rawPhone
+    const gsmNumber  = `+90${localPhone.substring(0, 10)}`
+
+    // Adres alanları — tümü ASCII
+    const safeCity    = toAscii(body.shipping_address?.city || 'Istanbul').substring(0, 30)
+    const safeAddress = toAscii([
       body.shipping_address?.address,
       body.shipping_address?.district,
       body.shipping_address?.city,
-    ].filter(Boolean).join(', ') || 'Belirtilmedi'
+    ].filter(Boolean).join(', ') || 'Belirtilmedi').substring(0, 300)
+    const safeContact = toAscii(buyerName).substring(0, 50)
 
-    // basketId'yi sipariş verilerini taşımak için kullanıyoruz (callback'te tekrar okunamayacak)
-    // Callback'te sipariş oluşturabilmek için verileri token üzerinden iyzico'dan geri alacağız
+    // ── App URL & Conversation ID ─────────────────────────────────────────
+    let appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+    appUrl = appUrl.replace(/\/$/, '')
+    const conversationId = `CHK${Date.now().toString(36)}${Math.random().toString(36).substring(2, 8)}`.substring(0, 30)
     const basketId = conversationId
 
-    const ipAddress = req.ip || req.headers.get('x-forwarded-for') || '85.34.78.112'
+    // ── Vercel logları için tam payload ───────────────────────────────────
+    console.log('═══ [IYZICO REQUEST] ══════════════════════════════')
+    console.log(JSON.stringify({
+      conversationId,
+      price: totalAmount.toFixed(2),
+      paidPrice: totalAmount.toFixed(2),
+      currency: 'TRY',
+      basketId,
+      callbackUrl: `${appUrl}/api/checkout/callback`,
+      buyer: {
+        id: (body.user_id || `GUEST_${conversationId}`).substring(0, 30),
+        name: firstName,
+        surname: lastName,
+        gsmNumber,
+        email: buyerEmail,
+        identityNumber: '74300864791',
+        registrationAddress: safeAddress,
+        ip: '85.34.78.112',
+        city: safeCity,
+        country: 'Turkey',
+      },
+      shippingAddress: { contactName: safeContact, city: safeCity, country: 'Turkey', address: safeAddress, zipCode: postalCode },
+      billingAddress:  { contactName: safeContact, city: safeCity, country: 'Turkey', address: safeAddress, zipCode: postalCode },
+      basketItems,
+      basketItemsTotal: basketItems.reduce((s, i) => s + Number(i.price), 0).toFixed(2),
+    }, null, 2))
+    console.log('═══════════════════════════════════════════════════')
 
+    // ── İyzico API çağrısı ────────────────────────────────────────────────
     const result = await initializeCheckoutForm({
       conversationId,
       price: totalAmount.toFixed(2),
@@ -99,70 +133,68 @@ export async function POST(req: NextRequest) {
       callbackUrl: `${appUrl}/api/checkout/callback`,
       buyer: {
         id: (body.user_id || `GUEST_${conversationId}`).substring(0, 30),
-        name: firstName.substring(0, 30),
-        surname: lastName.substring(0, 30),
-        gsmNumber: `+90${buyerPhone.replace(/\D/g, '').replace(/^0/, '').substring(0, 10)}`,
-        email: buyerEmail.substring(0, 100),
-        identityNumber: '74300864791', // İyzico'nun testler için kabul ettiği standart dummy TCKN
-        registrationAddress: fullAddress.substring(0, 300),
-        ip: ipAddress,
-        city: (body.shipping_address?.city || 'Istanbul').substring(0, 30),
+        name: firstName,
+        surname: lastName,
+        gsmNumber,
+        email: buyerEmail,
+        identityNumber: '74300864791',
+        registrationAddress: safeAddress,
+        ip: '85.34.78.112',
+        city: safeCity,
         country: 'Turkey',
       },
-      shippingAddress: {
-        contactName: buyerName.substring(0, 50),
-        city: (body.shipping_address?.city || 'Istanbul').substring(0, 30),
-        country: 'Turkey',
-        address: fullAddress.substring(0, 300),
-      },
-      billingAddress: {
-        contactName: buyerName.substring(0, 50),
-        city: (body.shipping_address?.city || 'Istanbul').substring(0, 30),
-        country: 'Turkey',
-        address: fullAddress.substring(0, 300),
-      },
+      shippingAddress: { contactName: safeContact, city: safeCity, country: 'Turkey', address: safeAddress },
+      billingAddress:  { contactName: safeContact, city: safeCity, country: 'Turkey', address: safeAddress },
       basketItems,
     })
 
+    // ── İyzico yanıtı ─────────────────────────────────────────────────────
+    console.log('═══ [IYZICO RESPONSE] ═════════════════════════════')
+    console.log(JSON.stringify({
+      status:         result.status,
+      errorCode:      result.errorCode,
+      errorMessage:   result.errorMessage,
+      errorGroup:     result.errorGroup,
+      token:          result.token ? result.token.substring(0, 20) + '...' : null,
+      formContentLen: result.checkoutFormContent?.length || 0,
+    }, null, 2))
+    console.log('═══════════════════════════════════════════════════')
+
     if (result.status !== 'success') {
-      console.error('[POST /api/checkout] iyzico error:', result)
-      return NextResponse.json(
-        { error: result.errorMessage || 'İyzico ödeme formu başlatılamadı.' },
-        { status: 400 }
-      )
+      const detail = [
+        result.errorCode  ? `[${result.errorCode}]`  : null,
+        result.errorMessage || null,
+        result.errorGroup ? `(${result.errorGroup})` : null,
+      ].filter(Boolean).join(' ')
+      const errorMsg = detail || 'İyzico ödeme formu başlatılamadı. Lütfen tekrar deneyin.'
+      console.error('[IYZICO ERROR] Tam yanıt:', JSON.stringify(result, null, 2))
+      return NextResponse.json({ error: errorMsg, iyzicoResult: result }, { status: 400 })
     }
 
-    // Token'ı ve sipariş bilgilerini cookie/session ile callback'e taşımak yerine
-    // server-side bir geçici kayıt kullanacağız (checkout_sessions tablosu veya orders pending)
-    // Ancak en temiz yol: callback'te iyzico'dan tüm ödeme bilgilerini geri almak.
-    // Sipariş bilgilerini de token ile eşleştirmek için Supabase'de geçici bir kayıt tutalım.
-
+    // ── Geçici sipariş kaydı (awaiting_payment) ───────────────────────────
     const { createServiceClient } = await import('@/lib/supabase/server')
     const supabase = createServiceClient()
 
-    // Geçici "awaiting_payment" kaydı (ödeme başarılı olursa "processing" yapılacak)
     await supabase
       .from('orders')
       .insert({
-        id: undefined, // auto-generate
-        guest_email: guestEmail,
-        user_id: body.user_id ?? null,
-        status: 'awaiting_payment',
-        total_amount: totalAmount,
-        shipping_fee: shippingFee,
-        shipping_address: body.shipping_address ?? null,
-        stripe_payment_intent_id: result.token, // iyzico token'ı burada saklıyoruz
+        guest_email:              guestEmail,
+        user_id:                  body.user_id ?? null,
+        status:                   'awaiting_payment',
+        total_amount:             totalAmount,
+        shipping_fee:             shippingFee,
+        shipping_address:         body.shipping_address ?? null,
+        stripe_payment_intent_id: result.token,
       })
       .select('id')
       .single()
       .then(async ({ data: tempOrder }) => {
         if (tempOrder) {
-          // Sipariş kalemlerini de kaydet
           const orderItems = items.map((item) => ({
-            order_id: tempOrder.id,
+            order_id:   tempOrder.id,
             product_id: item.product_id,
             variant_id: null,
-            quantity: Number(item.quantity),
+            quantity:   Number(item.quantity),
             unit_price: Number(item.unit_price),
           }))
           await supabase.from('order_items').insert(orderItems)
@@ -170,15 +202,12 @@ export async function POST(req: NextRequest) {
       })
 
     return NextResponse.json({
-      success: true,
+      success:             true,
       checkoutFormContent: result.checkoutFormContent,
-      token: result.token,
+      token:               result.token,
     })
   } catch (err: any) {
-    console.error('[POST /api/checkout] unexpected:', err)
-    return NextResponse.json(
-      { error: err?.message || 'Sunucu hatası' },
-      { status: 500 }
-    )
+    console.error('[CHECKOUT] Beklenmedik hata:', err)
+    return NextResponse.json({ error: err?.message || 'Sunucu hatası' }, { status: 500 })
   }
 }
