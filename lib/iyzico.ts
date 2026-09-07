@@ -112,32 +112,33 @@ export async function initializeCheckoutForm(params: {
     price: string
   }>
 }) {
-  return iyzicoRequest(
-    '/payment/iyzipos/checkoutform/initialize/auth/ecom',
-    {
-      locale: 'tr',
-      conversationId: params.conversationId,
-      price: params.price,
-      paidPrice: params.paidPrice,
-      currency: 'TRY',
-      basketId: params.basketId,
-      paymentGroup: 'PRODUCT',
-      callbackUrl: params.callbackUrl,
-      enabledInstallments: [1, 2, 3, 6, 9],
-      forceThreeDS: 1,
-      buyer: params.buyer,
-      shippingAddress: params.shippingAddress,
-      billingAddress: params.billingAddress,
-      basketItems: params.basketItems,
-    }
-  )
+  // Standart tek-satıcı Checkout Form endpoint'i.
+  // '/payment/iyzipos/...' pazaryeri (marketplace) API'sidir,
+  // subMerchantKey zorunlu kılar ve VPS-1080 hatasına yol açar.
+  return iyzicoRequest('/payment/checkoutform/initialize', {
+    locale: 'tr',
+    conversationId: params.conversationId,
+    price: params.price,
+    paidPrice: params.paidPrice,
+    currency: 'TRY',
+    basketId: params.basketId,
+    paymentGroup: 'PRODUCT',   // standard API'de de zorunlu, sub-merchant değil
+    callbackUrl: params.callbackUrl,
+    enabledInstallments: [1, 2, 3, 6, 9],
+    forceThreeDS: 1,
+    buyer: params.buyer,
+    shippingAddress: params.shippingAddress,
+    billingAddress: params.billingAddress,
+    basketItems: params.basketItems,
+  })
 }
 
 /**
  * İyzico Checkout Form sonucu sorgula (token ile)
  */
 export async function retrieveCheckoutForm(token: string) {
-  return iyzicoRequest('/payment/iyzipos/checkoutform/auth/ecom/detail', {
+  // Standart tek-satıcı Checkout Form sorgulama endpoint'i
+  return iyzicoRequest('/payment/checkoutform/auth/detail', {
     locale: 'tr',
     token,
   })
