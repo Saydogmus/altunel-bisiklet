@@ -52,8 +52,7 @@ export async function POST(req: NextRequest) {
       name: toAscii(item.product_name || 'Urun').substring(0, 50),
       category1: toAscii(item.category || 'Bisiklet').substring(0, 50),
       itemType: 'PHYSICAL',
-      // @ts-ignore
-      price: Number((Number(item.unit_price) * Number(item.quantity)).toFixed(2)),
+      price: (Number(item.unit_price) * Number(item.quantity)).toFixed(2),
     }))
 
     if (shippingFee > 0) {
@@ -62,8 +61,7 @@ export async function POST(req: NextRequest) {
         name: 'Kargo Ucreti',
         category1: 'Kargo',
         itemType: 'PHYSICAL',
-        // @ts-ignore
-        price: Number(shippingFee.toFixed(2)),
+        price: shippingFee.toFixed(2),
       })
     }
 
@@ -116,7 +114,7 @@ export async function POST(req: NextRequest) {
         surname: lastName,
         gsmNumber,
         email: buyerEmail,
-        identityNumber: (body.shipping_address?.tc_no || '74300864791').substring(0, 11),
+        identityNumber: (body.shipping_address?.tc_no || '89813371224').substring(0, 11),
         registrationAddress: safeAddress,
         ip: '85.34.78.112',
         city: safeCity,
@@ -142,7 +140,7 @@ export async function POST(req: NextRequest) {
         surname: lastName,
         gsmNumber,
         email: buyerEmail,
-        identityNumber: (body.shipping_address?.tc_no || '74300864791').substring(0, 11),
+        identityNumber: (body.shipping_address?.tc_no || '89813371224').substring(0, 11),
         registrationAddress: safeAddress,
         ip: '85.34.78.112',
         city: safeCity,
