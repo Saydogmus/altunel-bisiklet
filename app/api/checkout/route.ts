@@ -90,6 +90,10 @@ export async function POST(req: NextRequest) {
     ].filter(Boolean).join(', ') || 'Belirtilmedi').substring(0, 300)
     const safeContact = toAscii(buyerName).substring(0, 50)
 
+    // IP adresini al
+    const rawIp = req.headers.get('x-forwarded-for') || req.ip || '85.34.78.112'
+    const buyerIp = rawIp.split(',')[0].trim()
+
     // ── App URL & Conversation ID ─────────────────────────────────────────
 
     const conversationId = `CHK${Date.now().toString(36)}${Math.random().toString(36).substring(2, 8)}`.substring(0, 30)
@@ -116,7 +120,7 @@ export async function POST(req: NextRequest) {
         email: buyerEmail,
         identityNumber: (body.shipping_address?.tc_no || '89813371224').substring(0, 11),
         registrationAddress: safeAddress,
-        ip: '85.34.78.112',
+        ip: buyerIp,
         city: safeCity,
         country: 'Turkey',
       },
@@ -142,7 +146,7 @@ export async function POST(req: NextRequest) {
         email: buyerEmail,
         identityNumber: (body.shipping_address?.tc_no || '89813371224').substring(0, 11),
         registrationAddress: safeAddress,
-        ip: '85.34.78.112',
+        ip: buyerIp,
         city: safeCity,
         country: 'Turkey',
       },
