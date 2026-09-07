@@ -52,7 +52,8 @@ export async function POST(req: NextRequest) {
       name: toAscii(item.product_name || 'Urun').substring(0, 50),
       category1: toAscii(item.category || 'Bisiklet').substring(0, 50),
       itemType: 'PHYSICAL',
-      price: (Number(item.unit_price) * Number(item.quantity)).toFixed(2),
+      // @ts-ignore
+      price: Number((Number(item.unit_price) * Number(item.quantity)).toFixed(2)),
     }))
 
     if (shippingFee > 0) {
@@ -61,7 +62,8 @@ export async function POST(req: NextRequest) {
         name: 'Kargo Ucreti',
         category1: 'Kargo',
         itemType: 'PHYSICAL',
-        price: shippingFee.toFixed(2),
+        // @ts-ignore
+        price: Number(shippingFee.toFixed(2)),
       })
     }
 
