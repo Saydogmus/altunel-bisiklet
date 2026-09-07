@@ -84,6 +84,12 @@ async function iyzicoRequest(path: string, body: object) {
   console.log('[IYZICO RAW BODY]', requestBody)
 
   const randomKey = getRandomString()
+  
+  console.log('--- SIGNATURE DEBUG ---')
+  console.log('1. uriPath:', path)
+  console.log('2. requestBody:', requestBody)
+  console.log('3. randomKey:', randomKey)
+  
   const authorization = generateAuthorizationHeader(
     apiKey,
     secretKey,
@@ -91,6 +97,9 @@ async function iyzicoRequest(path: string, body: object) {
     path,
     requestBody
   )
+  
+  console.log('4. Authorization Header:', authorization)
+  console.log('-----------------------')
 
   const response = await fetch(`${IYZICO_BASE_URL}${path}`, {
     method: 'POST',
@@ -153,7 +162,8 @@ export async function initializeCheckoutForm(params: {
   // Standart tek-satıcı Checkout Form endpoint'i.
   // '/payment/iyzipos/...' pazaryeri (marketplace) API'sidir,
   // subMerchantKey zorunlu kılar ve VPS-1080 hatasına yol açar.
-  return iyzicoRequest('/payment/checkoutform/initialize', {
+  // Resmi SDK'da (CheckoutFormInitialize.js) rotanın tam ve doğru hali:
+  return iyzicoRequest('/payment/iyzipos/checkoutform/initialize/auth/ecom', {
     locale: 'tr',
     conversationId: params.conversationId,
     price: params.price,
