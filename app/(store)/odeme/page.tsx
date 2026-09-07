@@ -61,6 +61,7 @@ interface AddressForm {
   city: string
   district: string
   postal_code: string
+  tc_no: string
 }
 
 export default function CheckoutPage() {
@@ -83,6 +84,7 @@ export default function CheckoutPage() {
     city: '',
     district: '',
     postal_code: '',
+    tc_no: '',
   })
 
   const subtotal = getTotalPrice()
@@ -106,6 +108,11 @@ export default function CheckoutPage() {
     
     if (!/^\d{5}$/.test(address.postal_code)) {
       alert("Lütfen 5 haneli geçerli bir posta kodu girin.")
+      return
+    }
+
+    if (!/^\d{11}$/.test(address.tc_no)) {
+      alert("Lütfen 11 haneli geçerli bir TC Kimlik No girin (sadece rakam).")
       return
     }
     
@@ -141,6 +148,7 @@ export default function CheckoutPage() {
             city: address.city,
             district: address.district,
             postal_code: address.postal_code,
+            tc_no: address.tc_no,
           },
           items: orderItems,
           shipping_fee: shippingFee,
@@ -340,6 +348,14 @@ export default function CheckoutPage() {
                     <input id="phone" name="phone" type="tel" required
                       value={address.phone} onChange={handleAddressChange}
                       className="input-field" placeholder="0 (5XX) XXX XX XX" />
+                  </div>
+                  <div>
+                    <label htmlFor="tc_no" className="block text-sm font-semibold text-on-surface mb-1.5">
+                      TC Kimlik No <span className="text-primary">*</span>
+                    </label>
+                    <input id="tc_no" name="tc_no" type="text" required
+                      value={address.tc_no} onChange={handleAddressChange}
+                      className="input-field" placeholder="11 haneli TC Kimlik No" maxLength={11} />
                   </div>
                 </div>
 
