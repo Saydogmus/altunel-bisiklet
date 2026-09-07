@@ -96,12 +96,16 @@ export async function POST(req: NextRequest) {
     const conversationId = `CHK${Date.now().toString(36)}${Math.random().toString(36).substring(2, 8)}`.substring(0, 30)
     const basketId = conversationId
 
+    // Kargo dahil tüm ürünlerin (basketItems) iyzico fiyat toplamı 
+    // Nokta atışı eşleşmesi için doğrudan string fiyatları toplayarak garantiliyoruz
+    const calculatedTotal = basketItems.reduce((s, i) => s + Number(i.price), 0).toFixed(2)
+
     // ── Vercel logları için tam payload ───────────────────────────────────
     console.log('═══ [IYZICO REQUEST] ══════════════════════════════')
     console.log(JSON.stringify({
       conversationId,
-      price: totalAmount.toFixed(2),
-      paidPrice: totalAmount.toFixed(2),
+      price: calculatedTotal,
+      paidPrice: calculatedTotal,
       currency: 'TRY',
       basketId,
       callbackUrl: `${appUrl}/api/checkout/callback`,
@@ -127,8 +131,8 @@ export async function POST(req: NextRequest) {
     // ── İyzico API çağrısı ────────────────────────────────────────────────
     const result = await initializeCheckoutForm({
       conversationId,
-      price: totalAmount.toFixed(2),
-      paidPrice: totalAmount.toFixed(2),
+      price: calculatedTotal,
+      paidPrice: calculatedTotal,
       basketId,
       callbackUrl: `${appUrl}/api/checkout/callback`,
       buyer: {
@@ -143,8 +147,8 @@ export async function POST(req: NextRequest) {
         city: safeCity,
         country: 'Turkey',
       },
-      shippingAddress: { contactName: safeContact, city: safeCity, country: 'Turkey', address: safeAddress },
-      billingAddress:  { contactName: safeContact, city: safeCity, country: 'Turkey', address: safeAddress },
+      shippingAddress: { contactName: safeContact, city: safeCity, country: 'Turkey', address: safeAddress, zipCode: postalCode },
+      billingAddress:  { contactName: safeContact, city: safeCity, country: 'Turkey', address: safeAddress, zipCode: postalCode },
       basketItems,
     })
 
