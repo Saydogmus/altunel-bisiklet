@@ -91,8 +91,7 @@ export async function POST(req: NextRequest) {
     const safeContact = toAscii(buyerName).substring(0, 50)
 
     // ── App URL & Conversation ID ─────────────────────────────────────────
-    let appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-    appUrl = appUrl.replace(/\/$/, '')
+
     const conversationId = `CHK${Date.now().toString(36)}${Math.random().toString(36).substring(2, 8)}`.substring(0, 30)
     const basketId = conversationId
 
@@ -108,7 +107,7 @@ export async function POST(req: NextRequest) {
       paidPrice: calculatedTotal,
       currency: 'TRY',
       basketId,
-      callbackUrl: `${appUrl}/api/checkout/callback`,
+      callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/checkout/callback`,
       buyer: {
         id: (body.user_id || `GUEST_${conversationId}`).substring(0, 30),
         name: firstName,
@@ -134,7 +133,7 @@ export async function POST(req: NextRequest) {
       price: calculatedTotal,
       paidPrice: calculatedTotal,
       basketId,
-      callbackUrl: `${appUrl}/api/checkout/callback`,
+      callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/checkout/callback`,
       buyer: {
         id: (body.user_id || `GUEST_${conversationId}`).substring(0, 30),
         name: firstName,
