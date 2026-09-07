@@ -163,7 +163,6 @@ export async function initializeCheckoutForm(params: {
     paymentGroup: 'PRODUCT',   // standard API'de de zorunlu, sub-merchant değil
     callbackUrl: params.callbackUrl,
     enabledInstallments: [1, 2, 3, 6, 9],
-    forceThreeDS: 1,
     buyer: params.buyer,
     shippingAddress: params.shippingAddress,
     billingAddress: params.billingAddress,
