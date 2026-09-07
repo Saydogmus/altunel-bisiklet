@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
         .replace(/ö/g, 'o').replace(/Ö/g, 'O')
         .replace(/ü/g, 'u').replace(/Ü/g, 'U')
         .replace(/ç/g, 'c').replace(/Ç/g, 'C')
+        .replace(/[–—]/g, '-') // Özel tireleri normal tire yap
 
     // ── Basket items ──────────────────────────────────────────────────────
     const basketItems = items.map((item, idx) => ({
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
       name: toAscii(item.product_name || 'Urun').substring(0, 50),
       category1: toAscii(item.category || 'Bisiklet').substring(0, 50),
       itemType: 'PHYSICAL',
-      price: (Number(item.unit_price) * Number(item.quantity)).toFixed(2),
+      price: Number((Number(item.unit_price) * Number(item.quantity)).toFixed(2)),
     }))
 
     if (shippingFee > 0) {
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
         name: 'Kargo Ucreti',
         category1: 'Kargo',
         itemType: 'PHYSICAL',
-        price: shippingFee.toFixed(2),
+        price: Number(shippingFee.toFixed(2)),
       })
     }
 
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
       body.shipping_address?.district,
       body.shipping_address?.city,
     ].filter(Boolean).join(', ') || 'Belirtilmedi').substring(0, 300)
-    const safeContact = toAscii(buyerName).substring(0, 50)
+    const safeContact = toAscii(buyerName).trim().substring(0, 50)
 
     // IP adresini al
     const rawIp = req.headers.get('x-forwarded-for') || req.ip || '85.34.78.112'
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
 
     // Kargo dahil tüm ürünlerin (basketItems) iyzico fiyat toplamı 
     // Nokta atışı eşleşmesi için doğrudan string fiyatları toplayarak garantiliyoruz
-    const calculatedTotal = basketItems.reduce((s, i) => s + Number(i.price), 0).toFixed(2)
+    const calculatedTotal = Number(basketItems.reduce((s, i) => s + Number(i.price), 0).toFixed(2))
 
     // ── Vercel logları için tam payload ───────────────────────────────────
     console.log('═══ [IYZICO REQUEST] ══════════════════════════════')
@@ -123,6 +124,7 @@ export async function POST(req: NextRequest) {
         ip: buyerIp,
         city: safeCity,
         country: 'Turkey',
+        zipCode: postalCode,
       },
       shippingAddress: { contactName: safeContact, city: safeCity, country: 'Turkey', address: safeAddress, zipCode: postalCode },
       billingAddress:  { contactName: safeContact, city: safeCity, country: 'Turkey', address: safeAddress, zipCode: postalCode },
@@ -149,6 +151,7 @@ export async function POST(req: NextRequest) {
         ip: buyerIp,
         city: safeCity,
         country: 'Turkey',
+        zipCode: postalCode,
       },
       shippingAddress: { contactName: safeContact, city: safeCity, country: 'Turkey', address: safeAddress, zipCode: postalCode },
       billingAddress:  { contactName: safeContact, city: safeCity, country: 'Turkey', address: safeAddress, zipCode: postalCode },
