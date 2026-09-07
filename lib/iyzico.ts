@@ -47,6 +47,42 @@ async function iyzicoRequest(path: string, body: object) {
   }
 
   const requestBody = JSON.stringify(body)
+
+  // ══ Alan-alan format doğrulaması (İyzico errorCode 11 debug) ══
+  const b = body as any
+  const fieldChecks: Record<string, string> = {}
+
+  if (b.price !== undefined)
+    fieldChecks.price = typeof b.price === 'string' && /^\d+\.\d{2}$/.test(b.price)
+      ? `OK (${b.price})` : `HATA — beklenen: "109.90" formatı, gelen: ${JSON.stringify(b.price)}`
+
+  if (b.paidPrice !== undefined)
+    fieldChecks.paidPrice = typeof b.paidPrice === 'string' && /^\d+\.\d{2}$/.test(b.paidPrice)
+      ? `OK (${b.paidPrice})` : `HATA — beklenen: "109.90" formatı, gelen: ${JSON.stringify(b.paidPrice)}`
+
+  if (b.buyer?.identityNumber !== undefined)
+    fieldChecks['buyer.identityNumber'] = /^\d{11}$/.test(b.buyer.identityNumber)
+      ? `OK (${b.buyer.identityNumber})` : `HATA — 11 haneli rakam olmalı, gelen: ${b.buyer.identityNumber}`
+
+  if (b.buyer?.gsmNumber !== undefined)
+    fieldChecks['buyer.gsmNumber'] = /^\+90\d{10}$/.test(b.buyer.gsmNumber)
+      ? `OK (${b.buyer.gsmNumber})` : `HATA — +90XXXXXXXXXX formatı gerekli, gelen: ${b.buyer.gsmNumber}`
+
+  if (b.buyer?.ip !== undefined)
+    fieldChecks['buyer.ip'] = /^\d{1,3}(\.\d{1,3}){3}$/.test(b.buyer.ip)
+      ? `OK (${b.buyer.ip})` : `HATA — geçerli IPv4 gerekli, gelen: ${b.buyer.ip}`
+
+  if (b.basketItems !== undefined) {
+    const itemsSum = (b.basketItems as any[]).reduce((s: number, i: any) => s + Number(i.price), 0)
+    const priceVal = Number(b.price)
+    fieldChecks['basketItems toplamı'] = Math.abs(itemsSum - priceVal) < 0.01
+      ? `OK (${itemsSum.toFixed(2)} = price ${b.price})`
+      : `HATA — basketItems toplamı ${itemsSum.toFixed(2)}, price ${b.price} — Eşleşmiyor!`
+  }
+
+  console.log('[IYZICO FIELD CHECKS]', JSON.stringify(fieldChecks, null, 2))
+  console.log('[IYZICO RAW BODY]', requestBody)
+
   const randomKey = getRandomString()
   const authorization = generateAuthorizationHeader(
     apiKey,
@@ -68,7 +104,9 @@ async function iyzicoRequest(path: string, body: object) {
     body: requestBody,
   })
 
-  return response.json()
+  const result = await response.json()
+  console.log('[IYZICO RAW RESPONSE]', JSON.stringify(result))
+  return result
 }
 
 /**
