@@ -50,7 +50,8 @@ export async function POST(req: NextRequest) {
   } catch (parseErr: any) {
     console.error('[Callback] Form parse hatası:', parseErr?.message)
     return NextResponse.redirect(
-      `${siteUrl}/odeme/iptal?detay=${encodeURIComponent('form_parse_hatasi:' + (parseErr?.message || 'bilinmiyor'))}`
+      `${siteUrl}/odeme/iptal?detay=${encodeURIComponent('form_parse_hatasi:' + (parseErr?.message || 'bilinmiyor'))}`,
+      { status: 303 }
     )
   }
 
@@ -77,13 +78,15 @@ export async function POST(req: NextRequest) {
     } else {
       console.error('[Callback] Ne paymentId ne token geldi — params:', params.toString())
       return NextResponse.redirect(
-        `${siteUrl}/odeme/iptal?detay=${encodeURIComponent('odeme_parametresi_eksik')}`
+        `${siteUrl}/odeme/iptal?detay=${encodeURIComponent('odeme_parametresi_eksik')}`,
+        { status: 303 }
       )
     }
   } catch (iyzicoErr: any) {
     console.error('[Callback] İyzico API hatası:', iyzicoErr?.message)
     return NextResponse.redirect(
-      `${siteUrl}/odeme/iptal?detay=${encodeURIComponent('iyzico_api_hatasi:' + (iyzicoErr?.message || 'bilinmiyor'))}`
+      `${siteUrl}/odeme/iptal?detay=${encodeURIComponent('iyzico_api_hatasi:' + (iyzicoErr?.message || 'bilinmiyor'))}`,
+      { status: 303 }
     )
   }
 
@@ -146,11 +149,13 @@ export async function POST(req: NextRequest) {
     if (isSuccess) {
       console.error('[Callback] UYARI: Ödeme alındı ama DB kaydedilemedi! paymentId:', paymentId, '| token:', token)
       return NextResponse.redirect(
-        `${siteUrl}/odeme/basarili?detay=${encodeURIComponent('odeme_alindi_db_hatasi')}`
+        `${siteUrl}/odeme/basarili?detay=${encodeURIComponent('odeme_alindi_db_hatasi')}`,
+        { status: 303 }
       )
     }
     return NextResponse.redirect(
-      `${siteUrl}/odeme/iptal?detay=${encodeURIComponent('veritabani_hatasi:' + (dbErr?.message || 'bilinmiyor'))}`
+      `${siteUrl}/odeme/iptal?detay=${encodeURIComponent('veritabani_hatasi:' + (dbErr?.message || 'bilinmiyor'))}`,
+      { status: 303 }
     )
   }
 
@@ -159,13 +164,14 @@ export async function POST(req: NextRequest) {
     const successUrl = orderId
       ? `${siteUrl}/odeme/basarili?order=${orderId}`
       : `${siteUrl}/odeme/basarili`
-    return NextResponse.redirect(successUrl)
+    return NextResponse.redirect(successUrl, { status: 303 })
   } else {
     const errorDetail = paymentResult?.errorCode
       ? `${paymentResult.errorCode}:${paymentResult.errorMessage || 'odeme_reddedildi'}`
       : (paymentResult?.errorMessage || 'odeme_basarisiz')
     return NextResponse.redirect(
-      `${siteUrl}/odeme/iptal?detay=${encodeURIComponent(errorDetail)}`
+      `${siteUrl}/odeme/iptal?detay=${encodeURIComponent(errorDetail)}`,
+      { status: 303 }
     )
   }
 }

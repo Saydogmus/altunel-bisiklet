@@ -184,8 +184,8 @@ export async function initializeCheckoutForm(params: {
  * İyzico Checkout Form sonucu sorgula (token ile)
  */
 export async function retrieveCheckoutForm(token: string) {
-  // Standart tek-satıcı Checkout Form sorgulama endpoint'i
-  return iyzicoRequest('/payment/checkoutform/auth/detail', {
+  // Resmi SDK rotası
+  return iyzicoRequest('/payment/iyzipos/checkoutform/auth/ecom/detail', {
     locale: 'tr',
     token,
   })
