@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ShoppingCart, Menu, X, ChevronDown, User, LogOut } from 'lucide-react'
@@ -138,9 +139,19 @@ export default function Navbar() {
             {/* Logo */}
             <Link
               href="/"
-              className="font-headline font-bold text-xl tracking-tighter text-on-surface hover:text-primary transition-colors"
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             >
-              ALTUNEL BİSİKLET
+              <Image
+                src="/logo.png"
+                alt="Altunel Bisiklet Logo"
+                width={44}
+                height={44}
+                className="object-contain"
+                priority
+              />
+              <span className="font-headline font-bold text-xl tracking-tighter text-on-surface">
+                ALTUNEL BİSİKLET
+              </span>
             </Link>
 
             {/* Desktop Nav */}
