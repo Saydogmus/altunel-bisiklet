@@ -144,9 +144,9 @@ export default function Navbar() {
               <Image
                 src="/logo.png"
                 alt="Altunel Bisiklet Logo"
-                width={44}
-                height={44}
-                className="object-contain"
+                width={64}
+                height={64}
+                className="object-contain drop-shadow-sm"
                 priority
               />
               <span className="font-headline font-bold text-xl tracking-tighter text-on-surface">
