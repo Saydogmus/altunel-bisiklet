@@ -356,6 +356,9 @@ export default function CheckoutPage() {
                     <input id="tc_no" name="tc_no" type="text" required
                       value={address.tc_no} onChange={handleAddressChange}
                       className="input-field" placeholder="11 haneli TC Kimlik No" maxLength={11} />
+                    <p className="text-xs text-gray-500 mt-1.5">
+                      Yasal e-fatura düzenlemeleri ve güvenli ödeme (İyzico) gereksinimleri nedeniyle zorunludur.
+                    </p>
                   </div>
                 </div>
 
