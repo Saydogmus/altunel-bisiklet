@@ -282,7 +282,7 @@ export default function ProductDetailClient({
             {[
               { icon: Truck, text: 'Hızlı Kargo', sub: 'Türkiye geneli' },
               { icon: ShieldCheck, text: '2 Yıl Garanti', sub: 'Resmi garanti' },
-              { icon: RotateCcw, text: '30 Gün İade', sub: 'Koşulsuz iade' },
+              { icon: RotateCcw, text: '15 Gün İade', sub: 'Koşulsuz iade' },
             ].map(({ icon: Icon, text, sub }) => (
               <div key={text} className="flex flex-col items-center gap-1.5 p-3 text-center border border-surface-container">
                 <Icon className="w-4 h-4 text-primary" />

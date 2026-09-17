@@ -7,7 +7,8 @@ import Image from 'next/image'
 import { useCartStore } from '@/store/cartStore'
 import { formatPrice } from '@/lib/utils'
 
-const SHIPPING_FEE = 99.90
+const SHIPPING_THRESHOLD = 2000
+const SHIPPING_FEE = 100
 
 export default function CartDrawer() {
   const { items, isOpen, closeCart, removeItem, updateQuantity, getTotalPrice, getTotalItems } =
@@ -35,7 +36,8 @@ export default function CartDrawer() {
   if (!isOpen) return null
 
   const subtotal = getTotalPrice()
-  const total = subtotal + SHIPPING_FEE
+  const shippingFee = subtotal >= SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE
+  const total = subtotal + shippingFee
 
   return (
     <>
@@ -200,12 +202,16 @@ export default function CartDrawer() {
               <span className="font-medium text-on-surface">{formatPrice(subtotal)}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
-              <span className="text-secondary">Kargo (Sabit)</span>
-              <span className="font-medium text-on-surface">{formatPrice(SHIPPING_FEE)}</span>
+              <span className="text-secondary">Kargo</span>
+              <span className="font-medium text-on-surface">
+                {subtotal >= SHIPPING_THRESHOLD ? 'Ücretsiz' : formatPrice(SHIPPING_FEE)}
+              </span>
             </div>
             <div className="flex items-center justify-between font-bold text-base border-t border-surface-container pt-3">
               <span className="text-on-surface">Toplam</span>
-              <span className="text-primary">{formatPrice(total)}</span>
+              <span className="text-primary">
+                {formatPrice(subtotal + (subtotal >= SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE))}
+              </span>
             </div>
 
             <Link

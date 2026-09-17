@@ -6,13 +6,15 @@ import { Minus, Plus, Trash2, ArrowRight, ShoppingCart, Lock, Bike } from 'lucid
 import { useCartStore } from '@/store/cartStore'
 import { formatPrice } from '@/lib/utils'
 
-const SHIPPING_FEE = 99.90
+const SHIPPING_THRESHOLD = 2000
+const SHIPPING_FEE = 100
 
 export default function CartPage() {
   const { items, removeItem, updateQuantity, getTotalPrice, getTotalItems } = useCartStore()
 
   const subtotal = getTotalPrice()
-  const total = subtotal + SHIPPING_FEE
+  const shippingFee = subtotal >= SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE
+  const total = subtotal + shippingFee
 
   if (items.length === 0) {
     return (
@@ -141,8 +143,10 @@ export default function CartPage() {
                 <span className="text-on-surface font-medium">{formatPrice(subtotal)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-secondary">Kargo (Sabit Ücret)</span>
-                <span className="text-on-surface font-medium">{formatPrice(SHIPPING_FEE)}</span>
+                <span className="text-secondary">Kargo</span>
+                <span className="text-on-surface font-medium">
+                  {shippingFee === 0 ? 'Ücretsiz' : formatPrice(shippingFee)}
+                </span>
               </div>
               <div className="flex justify-between font-bold text-base pt-3 border-t border-surface-container">
                 <span className="text-on-surface">Genel Toplam</span>

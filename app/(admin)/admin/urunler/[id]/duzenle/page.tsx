@@ -169,7 +169,7 @@ export default function UrunDuzenle({ params }: { params: Promise<{ id: string }
       }
 
       setAlert({ type: 'success', message: 'Ürün başarıyla güncellendi! Yönlendiriliyorsunuz...' })
-      setTimeout(() => router.push('/admin/urunler'), 1500)
+      setTimeout(() => router.back(), 1500)
     } catch (err: unknown) {
       setAlert({ type: 'error', message: err instanceof Error ? err.message : 'Hata oluştu.' })
     } finally {
@@ -351,7 +351,8 @@ export default function UrunDuzenle({ params }: { params: Promise<{ id: string }
         </div>
 
         {/* Kaydet */}
-        <div className="flex gap-3 pb-10">
+        <div className="flex gap-4 pb-10">
+          <button type="button" onClick={() => router.back()} className="btn-outline px-8">İptal</button>
           <button type="submit" disabled={saving}
             className="btn-primary flex-1 justify-center disabled:opacity-60" id="save-edit-btn">
             {saving ? (
@@ -360,7 +361,6 @@ export default function UrunDuzenle({ params }: { params: Promise<{ id: string }
               <><Save className="w-4 h-4" />Değişiklikleri Kaydet</>
             )}
           </button>
-          <Link href="/admin/urunler" className="btn-outline px-8">İptal</Link>
         </div>
       </form>
     </div>

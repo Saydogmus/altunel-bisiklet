@@ -49,7 +49,7 @@ const TURKEY_CITIES = [
 ].sort((a, b) => a.localeCompare(b, 'tr'));
 
 const SHIPPING_THRESHOLD = 2000
-const SHIPPING_FEE = 99.90
+const SHIPPING_FEE = 100
 
 type Step = 'identity' | 'address' | 'confirm'
 
