@@ -48,6 +48,19 @@ export default function AdminProductsPage() {
 
   useEffect(() => { fetchProducts() }, [fetchProducts])
 
+  useEffect(() => {
+    if (!loading) {
+      const scrollY = sessionStorage.getItem('admin_products_scroll')
+      if (scrollY) {
+        // Küçük bir gecikme ekleyerek dom'un tamamen render edildiğinden emin oluyoruz
+        requestAnimationFrame(() => {
+          window.scrollTo(0, parseInt(scrollY, 10))
+          sessionStorage.removeItem('admin_products_scroll')
+        })
+      }
+    }
+  }, [loading])
+
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`"${name}" ürününü pasif hale getirmek istiyor musunuz?`)) return
     setDeleting(id)
@@ -217,6 +230,7 @@ export default function AdminProductsPage() {
                         <div className="flex items-center justify-end gap-2">
                           <Link
                             href={`/admin/urunler/${product.id}/duzenle`}
+                            onClick={() => sessionStorage.setItem('admin_products_scroll', window.scrollY.toString())}
                             className="p-1.5 text-secondary hover:text-primary transition-colors"
                             aria-label="Düzenle"
                             title="Düzenle"
